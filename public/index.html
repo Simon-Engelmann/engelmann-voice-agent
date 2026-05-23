@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Realtime Voice Agent</title>
+    <style>
+      :root {
+        --bg: #f5f5f7;
+        --card: rgba(255, 255, 255, 0.72);
+        --text: #1d1d1f;
+        --muted: #6e6e73;
+        --accent: #0071e3;
+        --danger: #ff3b30;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+        background: linear-gradient(180deg, #f5f5f7 0%, #e9ecf1 100%);
+        color: var(--text);
+        min-height: 100dvh;
+      }
+      .app { padding: 16px; max-width: 760px; margin: 0 auto; }
+      .glass {
+        background: var(--card);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.7);
+        border-radius: 24px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      }
+      .hero { padding: 20px; text-align: center; }
+      .avatar {
+        width: 142px;
+        height: 142px;
+        border-radius: 50%;
+        margin: 8px auto 14px;
+        display: grid;
+        place-items: center;
+        font-size: 58px;
+        background: radial-gradient(circle at 30% 20%, #89c3ff, #0a84ff 60%, #0054ad 100%);
+        box-shadow: 0 10px 28px rgba(10, 132, 255, 0.45);
+        transition: transform 0.2s ease;
+      }
+      .avatar.speaking {
+        animation: speak 0.6s ease-in-out infinite alternate;
+      }
+      @keyframes speak {
+        from { transform: scale(1); }
+        to { transform: scale(1.08); }
+      }
+      h1 { font-size: 24px; margin: 4px 0 10px; }
+      p { margin: 6px 0; color: var(--muted); }
+      .row { display: flex; gap: 10px; margin-top: 12px; }
+      button, input, textarea {
+        border: 0;
+        border-radius: 14px;
+        padding: 12px;
+        font-size: 16px;
+      }
+      button { font-weight: 600; }
+      .btn-primary { background: var(--accent); color: #fff; flex: 1; }
+      .btn-danger { background: var(--danger); color: #fff; flex: 1; }
+      textarea, input {
+        width: 100%;
+        margin-top: 10px;
+        border: 1px solid #d2d2d7;
+        background: #fff;
+      }
+      .swipe-hint {
+        text-align: center;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .chat-sheet {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 70dvh;
+        border-top-left-radius: 24px;
+        border-top-right-radius: 24px;
+        background: rgba(255, 255, 255, 0.95);
+        transform: translateY(calc(100% - 62px));
+        transition: transform 0.25s ease;
+        box-shadow: 0 -15px 35px rgba(0, 0, 0, 0.12);
+        display: flex;
+        flex-direction: column;
+      }
+      .chat-sheet.open { transform: translateY(0); }
+      .handle { width: 56px; height: 5px; border-radius: 3px; background: #c7c7cc; margin: 10px auto; }
+      .chat-header { text-align: center; font-weight: 600; padding-bottom: 8px; }
+      .chat-log {
+        flex: 1;
+        overflow: auto;
+        padding: 0 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .bubble { padding: 10px 12px; border-radius: 14px; max-width: 85%; }
+      .me { align-self: flex-end; background: #0071e3; color: #fff; }
+      .ai { align-self: flex-start; background: #e9e9ed; }
+      .chat-input { padding: 10px 12px 16px; }
+      @media (min-width: 768px) {
+        .chat-sheet { max-width: 760px; margin: 0 auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <section class="glass hero">
+        <div id="avatar" class="avatar">🧠</div>
+        <h1>Realtime Voice Agent</h1>
+        <p id="status">Disconnected</p>
+
+        <label for="instructions">Agent Instructions</label>
+        <textarea id="instructions" rows="3">You are a helpful general ChatGPT voice assistant.</textarea>
+
+        <div class="row">
+          <button id="connectBtn" class="btn-primary">Connect</button>
+          <button id="disconnectBtn" class="btn-danger" disabled>Disconnect</button>
+        </div>
+
+        <label for="fileInput">Photo/File Upload</label>
+        <input type="file" id="fileInput" />
+        <button id="uploadBtn" class="btn-primary" style="margin-top:10px;width:100%">Upload</button>
+        <p id="uploadStatus"></p>
+        <p class="swipe-hint">Swipe up to open chat ↑</p>
+      </section>
+    </main>
+
+    <section id="chatSheet" class="chat-sheet">
+      <div id="chatHandle" class="handle"></div>
+      <div class="chat-header">Chat</div>
+      <div id="chatLog" class="chat-log"></div>
+      <div class="chat-input">
+        <input id="textInput" placeholder="Type a message" />
+        <button id="sendBtn" class="btn-primary" style="margin-top:8px;width:100%">Send</button>
+      </div>
+    </section>
+
+    <script>
+      const avatar = document.getElementById('avatar');
+      const statusEl = document.getElementById('status');
+      const connectBtn = document.getElementById('connectBtn');
+      const disconnectBtn = document.getElementById('disconnectBtn');
+      const uploadBtn = document.getElementById('uploadBtn');
+      const fileInput = document.getElementById('fileInput');
+      const uploadStatus = document.getElementById('uploadStatus');
+      const textInput = document.getElementById('textInput');
+      const sendBtn = document.getElementById('sendBtn');
+      const chatLog = document.getElementById('chatLog');
+      const chatSheet = document.getElementById('chatSheet');
+      const chatHandle = document.getElementById('chatHandle');
+      const instructions = document.getElementById('instructions');
+
+      let pc = null;
+      let dc = null;
+      let dragStartY = 0;
+
+      function appendBubble(role, text) {
+        const el = document.createElement('div');
+        el.className = `bubble ${role === 'me' ? 'me' : 'ai'}`;
+        el.textContent = text;
+        chatLog.appendChild(el);
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+
+      function setConnected(isConnected) {
+        connectBtn.disabled = isConnected;
+        disconnectBtn.disabled = !isConnected;
+        statusEl.textContent = isConnected ? 'Connected' : 'Disconnected';
+      }
+
+      function openChat(open) {
+        chatSheet.classList.toggle('open', open);
+      }
+
+      async function connect() {
+        statusEl.textContent = 'Connecting...';
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        const sessionResp = await fetch('/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instructions: instructions.value })
+        });
+        const sessionData = await sessionResp.json();
+        const ephemeralKey = sessionData?.client_secret?.value;
+        if (!sessionResp.ok || !ephemeralKey) {
+          throw new Error('Could not create session');
+        }
+
+        pc = new RTCPeerConnection();
+        pc.ontrack = (event) => {
+          const audio = new Audio();
+          audio.srcObject = event.streams[0];
+          audio.play();
+        };
+
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        dc = pc.createDataChannel('oai-events');
+
+        dc.onmessage = (event) => {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'response.output_text.delta' && msg.delta) {
+            avatar.classList.add('speaking');
+            appendBubble('ai', msg.delta);
+          }
+          if (msg.type === 'response.output_text.done') {
+            avatar.classList.remove('speaking');
+          }
+          if (msg.type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
+            appendBubble('me', msg.transcript);
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const sdpResp = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
+          method: 'POST',
+          body: offer.sdp,
+          headers: {
+            Authorization: `Bearer ${ephemeralKey}`,
+            'Content-Type': 'application/sdp'
+          }
+        });
+
+        const answer = await sdpResp.text();
+        await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+        setConnected(true);
+      }
+
+      function disconnect() {
+        if (dc) dc.close();
+        if (pc) pc.close();
+        dc = null;
+        pc = null;
+        avatar.classList.remove('speaking');
+        setConnected(false);
+      }
+
+      function sendText() {
+        const text = textInput.value.trim();
+        if (!text || !dc) return;
+
+        dc.send(JSON.stringify({
+          type: 'conversation.item.create',
+          item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] }
+        }));
+        dc.send(JSON.stringify({ type: 'response.create' }));
+
+        appendBubble('me', text);
+        textInput.value = '';
+      }
+
+      async function uploadFile() {
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        uploadStatus.textContent = 'Uploading...';
+        const res = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok) {
+          uploadStatus.textContent = data.error || 'Upload failed';
+          return;
+        }
+
+        uploadStatus.textContent = `Uploaded ${data.file.name}`;
+        appendBubble('me', `[File uploaded] ${data.file.name}`);
+      }
+
+      connectBtn.addEventListener('click', () => connect().catch((e) => {
+        statusEl.textContent = `Error: ${e.message}`;
+        disconnect();
+      }));
+      disconnectBtn.addEventListener('click', disconnect);
+      sendBtn.addEventListener('click', sendText);
+      uploadBtn.addEventListener('click', uploadFile);
+      textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendText(); });
+
+      chatHandle.addEventListener('click', () => openChat(!chatSheet.classList.contains('open')));
+      chatSheet.addEventListener('touchstart', (e) => { dragStartY = e.touches[0].clientY; }, { passive: true });
+      chatSheet.addEventListener('touchend', (e) => {
+        const delta = dragStartY - e.changedTouches[0].clientY;
+        if (delta > 30) openChat(true);
+        if (delta < -30) openChat(false);
+      }, { passive: true });
+    </script>
+  </body>
+</html>

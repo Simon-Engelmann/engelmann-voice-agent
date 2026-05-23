@@ -1,0 +1,19 @@
+app = "engelmann-voice-agent"
+primary_region = "fra"
+
+[env]
+  PORT = "8080"
+  OPENAI_REALTIME_MODEL = "gpt-realtime"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "1gb"
