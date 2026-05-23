@@ -1,377 +1,289 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Realtime Voice Agent</title>
+    <title>Voice Avatar</title>
     <style>
       :root {
-        --bg: #f5f5f7;
-        --card: rgba(255, 255, 255, 0.72);
+        color-scheme: light;
+        --bg: #f7f8fb;
+        --card: rgba(255, 255, 255, 0.74);
         --text: #1d1d1f;
         --muted: #6e6e73;
-        --accent: #0071e3;
-        --danger: #ff3b30;
+        --line: rgba(60, 60, 67, 0.12);
+        --blue: #007aff;
+        --shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
       }
       * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
       body {
-        margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
-        background: linear-gradient(180deg, #f5f5f7 0%, #e9ecf1 100%);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+        background: radial-gradient(circle at 20% 10%, #ffffff 0%, var(--bg) 72%);
         color: var(--text);
-        min-height: 100dvh;
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
       }
-      .app { padding: 16px; max-width: 760px; margin: 0 auto; }
-      .glass {
-        background: var(--card);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.7);
-        border-radius: 24px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-      }
-      .hero { padding: 20px; text-align: center; }
-      .avatar {
-        width: 142px;
-        height: 142px;
-        border-radius: 50%;
-        margin: 8px auto 14px;
-        display: grid;
-        place-items: center;
-        font-size: 58px;
-        background: radial-gradient(circle at 30% 20%, #89c3ff, #0a84ff 60%, #0054ad 100%);
-        box-shadow: 0 10px 28px rgba(10, 132, 255, 0.45);
-        transition: transform 0.2s ease;
-      }
-      .avatar.speaking {
-        animation: speak 0.6s ease-in-out infinite alternate;
-      }
-      @keyframes speak {
-        from { transform: scale(1); }
-        to { transform: scale(1.08); }
-      }
-      h1 { font-size: 24px; margin: 4px 0 10px; }
-      p { margin: 6px 0; color: var(--muted); }
-      .row { display: flex; gap: 10px; margin-top: 12px; }
-      button, input, textarea {
-        border: 0;
-        border-radius: 14px;
-        padding: 12px;
-        font-size: 16px;
-      }
-      button { font-weight: 600; }
-      .btn-primary { background: var(--accent); color: #fff; flex: 1; }
-      .btn-danger { background: var(--danger); color: #fff; flex: 1; }
-      textarea, input {
-        width: 100%;
-        margin-top: 10px;
-        border: 1px solid #d2d2d7;
-        background: #fff;
-      }
-      .swipe-hint {
-        text-align: center;
-        margin-top: 14px;
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .status-error {
-        color: #b00020;
-        font-weight: 600;
-      }
-      .chat-sheet {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: 70dvh;
-        border-top-left-radius: 24px;
-        border-top-right-radius: 24px;
-        background: rgba(255, 255, 255, 0.95);
-        transform: translateY(calc(100% - 62px));
-        transition: transform 0.25s ease;
-        box-shadow: 0 -15px 35px rgba(0, 0, 0, 0.12);
-        display: flex;
-        flex-direction: column;
-      }
-      .chat-sheet.open { transform: translateY(0); }
-      .handle { width: 56px; height: 5px; border-radius: 3px; background: #c7c7cc; margin: 10px auto; }
-      .chat-header { text-align: center; font-weight: 600; padding-bottom: 8px; }
-      .chat-log {
-        flex: 1;
-        overflow: auto;
-        padding: 0 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .bubble { padding: 10px 12px; border-radius: 14px; max-width: 85%; }
-      .me { align-self: flex-end; background: #0071e3; color: #fff; }
-      .ai { align-self: flex-start; background: #e9e9ed; }
-      .chat-input { padding: 10px 12px 16px; }
-      @media (min-width: 768px) {
-        .chat-sheet { max-width: 760px; margin: 0 auto; }
-      }
+      .app { height: 100%; padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom)); display:flex; flex-direction:column; }
+      .status { text-align:center; color: var(--muted); font-size: 13px; min-height: 20px; }
+      .avatar-stage { flex:1; display:grid; place-items:center; position:relative; }
+      .avatar-wrap { width:min(72vw,360px); aspect-ratio:1/1; filter: drop-shadow(0 20px 28px rgba(0,0,0,.12)); }
+      svg { width:100%; height:100%; overflow:visible; }
+      .float { animation: float 5.2s ease-in-out infinite; transform-origin: 50% 65%; }
+      .breathe { animation: breathe 4.2s ease-in-out infinite; transform-origin: 50% 62%; }
+      .head { animation: nod 6s ease-in-out infinite; transform-origin: 50% 48%; }
+      .mouth { transform-origin: 50% 67%; }
+      .talking .mouth { animation: talk .24s ease-in-out infinite alternate; }
+      .talking .head { animation: activeHead .9s ease-in-out infinite alternate; }
+      .talking .glow { opacity: .85; }
+      .glow { opacity:.3; transition: opacity .2s ease; }
+      @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+      @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+      @keyframes nod { 0%,100%{transform:rotate(-1deg)} 50%{transform:rotate(1.6deg)} }
+      @keyframes activeHead { from{transform:rotate(-2deg)} to{transform:rotate(2deg)} }
+      @keyframes talk { from{transform:scaleY(.5)} to{transform:scaleY(1.2)} }
+
+      .pill { position:absolute; bottom: 12px; left:50%; transform:translateX(-50%); background:var(--card); border:1px solid var(--line); border-radius:999px; padding:10px 14px; box-shadow:var(--shadow); font-size:14px; }
+      .start-popup { position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.22); backdrop-filter: blur(6px); z-index:40; }
+      .start-popup.show { display:grid; }
+      .popup-card { width:min(90vw,340px); border-radius:24px; background:rgba(255,255,255,.92); padding:20px; box-shadow:var(--shadow); text-align:center; }
+      .popup-card p{ color:var(--muted); font-size:14px; }
+      button, .btn { border:none; background:var(--blue); color:#fff; border-radius:14px; min-height:46px; padding:10px 16px; font-weight:600; font-size:16px; width:100%; }
+
+      .sheet { position:fixed; left:0; right:0; bottom:0; height:min(70vh,640px); background:rgba(255,255,255,.95); border-radius:24px 24px 0 0; border:1px solid var(--line); box-shadow:0 -10px 35px rgba(0,0,0,.12); transform:translateY(calc(100% - 52px)); transition:transform .26s ease; z-index:20; display:flex; flex-direction:column; }
+      .sheet.open { transform:translateY(0); }
+      .grab { width:56px; height:6px; border-radius:99px; background:#d2d2d7; margin:10px auto 8px; }
+      .sheet-head { text-align:center; font-weight:600; font-size:14px; }
+      .messages { flex:1; overflow:auto; padding:10px 14px 8px; display:flex; flex-direction:column; gap:10px; }
+      .msg { max-width:85%; border-radius:18px; padding:10px 12px; font-size:14px; line-height:1.35; box-shadow:0 4px 10px rgba(0,0,0,.05); white-space:pre-wrap; }
+      .msg.user { align-self:flex-end; background:#e9f2ff; }
+      .msg.ai { align-self:flex-start; background:#f2f2f7; }
+      .msg.system { align-self:center; background:#fff6d6; color:#7a5b00; }
+      .compose { padding:10px 12px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); display:grid; gap:8px; }
+      .row { display:flex; gap:8px; }
+      input[type="text"] { flex:1; min-height:44px; border-radius:13px; border:1px solid var(--line); padding:0 12px; font-size:15px; }
+      .upload-btn { min-height:44px; border-radius:13px; border:1px solid var(--line); background:#fff; color:var(--text); display:flex; align-items:center; justify-content:center; padding:0 10px; }
+      #fileInput { display:none; }
     </style>
   </head>
   <body>
     <main class="app">
-      <section class="glass hero">
-        <div id="avatar" class="avatar">🧠</div>
-        <h1>Realtime Voice Agent</h1>
-        <p id="status">Disconnected</p>
-
-        <label for="instructions">Agent Instructions</label>
-        <textarea id="instructions" rows="3">You are a helpful general ChatGPT voice assistant.</textarea>
-
-        <div class="row">
-          <button id="connectBtn" class="btn-primary">Connect</button>
-          <button id="disconnectBtn" class="btn-danger" disabled>Disconnect</button>
+      <div id="status" class="status">Initialisiere Sprachmodus…</div>
+      <section class="avatar-stage">
+        <div id="avatar" class="avatar-wrap">
+          <svg viewBox="0 0 300 300" aria-label="Avatar">
+            <defs>
+              <radialGradient id="face" cx="50%" cy="35%" r="70%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebedf3"/></radialGradient>
+              <linearGradient id="shirt" x1="0" x2="1"><stop offset="0" stop-color="#dbe7ff"/><stop offset="1" stop-color="#c5dafd"/></linearGradient>
+            </defs>
+            <g class="float">
+              <ellipse class="glow" cx="150" cy="252" rx="72" ry="18" fill="#8bb8ff"/>
+              <g class="breathe">
+                <ellipse cx="150" cy="228" rx="62" ry="44" fill="url(#shirt)"/>
+                <g class="head">
+                  <circle cx="150" cy="130" r="64" fill="url(#face)" stroke="#d7d9df"/>
+                  <circle cx="126" cy="120" r="6" fill="#2b2b2f"/>
+                  <circle cx="174" cy="120" r="6" fill="#2b2b2f"/>
+                  <path d="M124 150 C136 162, 164 162, 176 150" stroke="#9a6f5f" stroke-width="4" fill="none" stroke-linecap="round"/>
+                  <ellipse class="mouth" cx="150" cy="158" rx="14" ry="8" fill="#9d4f4f"/>
+                </g>
+              </g>
+            </g>
+          </svg>
         </div>
-
-        <label for="fileInput">Photo/File Upload</label>
-        <input type="file" id="fileInput" />
-        <button id="uploadBtn" class="btn-primary" style="margin-top:10px;width:100%">Upload</button>
-        <p id="uploadStatus"></p>
-        <p class="swipe-hint">Swipe up to open chat ↑</p>
+        <div class="pill">Swipe ↑ für Chat</div>
       </section>
     </main>
 
-    <section id="chatSheet" class="chat-sheet">
-      <div id="chatHandle" class="handle"></div>
-      <div class="chat-header">Chat</div>
-      <div id="chatLog" class="chat-log"></div>
-      <div class="chat-input">
-        <input id="textInput" placeholder="Type a message" />
-        <button id="sendBtn" class="btn-primary" style="margin-top:8px;width:100%">Send</button>
+    <section id="sheet" class="sheet" aria-label="Chat">
+      <div id="grab" class="grab"></div>
+      <div class="sheet-head">Dialog</div>
+      <div id="messages" class="messages"></div>
+      <div class="compose">
+        <div class="row">
+          <input id="textInput" type="text" placeholder="Nachricht schreiben…" />
+          <button id="sendBtn" style="width:auto;padding:0 14px;">Senden</button>
+        </div>
+        <div class="row">
+          <label class="upload-btn" for="fileInput">Datei/Fotos hochladen</label>
+          <input id="fileInput" type="file" />
+        </div>
       </div>
     </section>
 
+    <div id="startPopup" class="start-popup">
+      <div class="popup-card">
+        <h3>Sprachmodus blockiert</h3>
+        <p>Safari/iOS benötigt eine Nutzeraktion für Mikrofon/Audio.</p>
+        <button id="startVoiceBtn">Sprachmodus starten</button>
+      </div>
+    </div>
+
     <script>
-      const avatar = document.getElementById('avatar');
+      const DEFAULT_INSTRUCTIONS = "Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, außer der Nutzer wünscht eine andere Sprache. Antworte natürlich, klar und knapp.";
       const statusEl = document.getElementById('status');
-      const connectBtn = document.getElementById('connectBtn');
-      const disconnectBtn = document.getElementById('disconnectBtn');
-      const uploadBtn = document.getElementById('uploadBtn');
+      const avatarEl = document.getElementById('avatar');
+      const messagesEl = document.getElementById('messages');
+      const sheetEl = document.getElementById('sheet');
       const fileInput = document.getElementById('fileInput');
-      const uploadStatus = document.getElementById('uploadStatus');
       const textInput = document.getElementById('textInput');
       const sendBtn = document.getElementById('sendBtn');
-      const chatLog = document.getElementById('chatLog');
-      const chatSheet = document.getElementById('chatSheet');
-      const chatHandle = document.getElementById('chatHandle');
-      const instructions = document.getElementById('instructions');
+      const popup = document.getElementById('startPopup');
+      const startVoiceBtn = document.getElementById('startVoiceBtn');
 
-      let pc = null;
-      let dc = null;
-      let remoteAudio = null;
-      let dragStartY = 0;
+      let pc, dc, localStream;
       let isConnecting = false;
-      let currentAiBubble = null;
-      let stopSpeakingTimer = null;
+      let stopTalkTimer;
+      let activeAiBubble = null;
+      const remoteAudio = new Audio();
+      remoteAudio.autoplay = true;
+      remoteAudio.playsInline = true;
 
-      function appendBubble(role, text) {
-        if (!text) return;
+      const setStatus = (s, isError = false) => {
+        statusEl.textContent = s;
+        statusEl.style.color = isError ? '#cc1f1f' : 'var(--muted)';
+      };
+      const addMsg = (role, text) => {
         const el = document.createElement('div');
-        el.className = `bubble ${role === 'me' ? 'me' : 'ai'}`;
+        el.className = `msg ${role}`;
         el.textContent = text;
-        chatLog.appendChild(el);
-        chatLog.scrollTop = chatLog.scrollHeight;
-      }
+        messagesEl.appendChild(el);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return el;
+      };
+      const beginTalk = () => {
+        clearTimeout(stopTalkTimer);
+        avatarEl.classList.add('talking');
+      };
+      const endTalkDelayed = () => {
+        clearTimeout(stopTalkTimer);
+        stopTalkTimer = setTimeout(() => avatarEl.classList.remove('talking'), 1500);
+      };
 
-      function setConnected(isConnected) {
-        connectBtn.disabled = isConnected || isConnecting;
-        disconnectBtn.disabled = !isConnected;
-        statusEl.textContent = isConnected ? 'Connected' : 'Disconnected';
-        statusEl.classList.remove('status-error');
-      }
+      function openSheet(v=true){ sheetEl.classList.toggle('open', v); }
+      let startY = 0;
+      sheetEl.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, {passive:true});
+      sheetEl.addEventListener('touchend', e => {
+        const delta = e.changedTouches[0].clientY - startY;
+        if (delta < -40) openSheet(true);
+        if (delta > 40) openSheet(false);
+      }, {passive:true});
 
-      function setError(message) {
-        statusEl.textContent = `Error: ${message}`;
-        statusEl.classList.add('status-error');
-      }
-
-      function setSpeaking(speaking) {
-        if (stopSpeakingTimer) {
-          clearTimeout(stopSpeakingTimer);
-          stopSpeakingTimer = null;
-        }
-        avatar.classList.toggle('speaking', speaking);
-      }
-
-      function scheduleStopSpeaking() {
-        if (stopSpeakingTimer) clearTimeout(stopSpeakingTimer);
-        stopSpeakingTimer = setTimeout(() => setSpeaking(false), 1500);
-      }
-
-      function appendAiDelta(delta) {
-        if (!delta) return;
-        if (!currentAiBubble) {
-          currentAiBubble = document.createElement('div');
-          currentAiBubble.className = 'bubble ai';
-          currentAiBubble.textContent = '';
-          chatLog.appendChild(currentAiBubble);
-        }
-        currentAiBubble.textContent += delta;
-        chatLog.scrollTop = chatLog.scrollHeight;
-      }
-
-      function openChat(open) {
-        chatSheet.classList.toggle('open', open);
-      }
-
-      async function connect() {
+      async function connectVoice({fromUserGesture=false} = {}) {
         if (isConnecting) return;
         isConnecting = true;
-        connectBtn.disabled = true;
-        disconnectBtn.disabled = true;
-        statusEl.textContent = 'Connecting...';
-        statusEl.classList.remove('status-error');
+        setStatus('Verbinde…');
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-          const sessionResp = await fetch('/session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ instructions: instructions.value })
-          });
-          const sessionData = await sessionResp.json();
-          const ephemeralKey = sessionData?.client_secret?.value;
-          if (!sessionResp.ok || !ephemeralKey) {
-            throw new Error(
-              sessionData?.error?.message ||
-              sessionData?.error ||
-              JSON.stringify(sessionData) ||
-              'Could not create realtime session.'
-            );
-          }
-
+          localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           pc = new RTCPeerConnection();
+          localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
           pc.ontrack = (event) => {
-            if (!remoteAudio) {
-              remoteAudio = new Audio();
-              remoteAudio.autoplay = true;
-              remoteAudio.playsInline = true;
-            }
             remoteAudio.srcObject = event.streams[0];
-            remoteAudio.play().catch(() => {});
+            if (fromUserGesture) remoteAudio.play().catch(() => {});
           };
-
-          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
           dc = pc.createDataChannel('oai-events');
+          dc.onmessage = handleRealtimeMessage;
 
-          dc.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            if (msg.type && msg.type.startsWith('response.')) {
-              setSpeaking(true);
-            }
-            if (msg.type === 'response.created') currentAiBubble = null;
-            if (msg.type === 'response.audio_transcript.delta' && msg.delta) appendAiDelta(msg.delta);
-            if (msg.type === 'response.output_text.delta' && msg.delta) appendAiDelta(msg.delta);
-            if (msg.type === 'response.audio.delta') {
-              setSpeaking(true);
-            }
-            if (msg.type === 'response.done' || msg.type === 'response.output_text.done') {
-              scheduleStopSpeaking();
-              currentAiBubble = null;
-            }
-            if (msg.type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
-              appendBubble('me', msg.transcript);
-            }
-          };
+          const sessionRes = await fetch('/session', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ instructions: DEFAULT_INSTRUCTIONS })
+          });
+          const sessionBody = await sessionRes.text();
+          let sessionData = {};
+          try { sessionData = JSON.parse(sessionBody); } catch {}
+          if (!sessionRes.ok) {
+            throw new Error(`/session Fehler ${sessionRes.status}: ${sessionBody}`);
+          }
 
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
-
-          const sdpResp = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
-            method: 'POST',
-            body: offer.sdp,
-            headers: {
-              Authorization: `Bearer ${ephemeralKey}`,
-              'Content-Type': 'application/sdp'
-            }
+          const sdpRes = await fetch('https://api.openai.com/v1/realtime?model=' + encodeURIComponent(sessionData.model), {
+            method:'POST',
+            headers:{ Authorization: `Bearer ${sessionData.client_secret.value}`, 'Content-Type':'application/sdp' },
+            body: offer.sdp
           });
-          if (!sdpResp.ok) {
-            const sdpError = await sdpResp.text();
-            throw new Error(`WebRTC handshake failed (${sdpResp.status}): ${sdpError || 'unknown error'}`);
-          }
-
-          const answer = await sdpResp.text();
-          await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-          setConnected(true);
+          const sdpText = await sdpRes.text();
+          if (!sdpRes.ok) throw new Error(`SDP/OpenAI Fehler ${sdpRes.status}: ${sdpText}`);
+          await pc.setRemoteDescription({ type:'answer', sdp: sdpText });
+          setStatus('Verbunden');
+        } catch (err) {
+          setStatus(err.message || 'Mikrofon/Verbindung fehlgeschlagen', true);
+          addMsg('system', 'Fehler: ' + (err.message || String(err)));
+          popup.classList.add('show');
+          cleanup();
         } finally {
           isConnecting = false;
-          connectBtn.disabled = !!pc;
-          if (!pc) disconnectBtn.disabled = true;
         }
       }
 
-      function disconnect() {
+      function cleanup() {
         if (dc) dc.close();
         if (pc) pc.close();
-        if (remoteAudio) {
-          remoteAudio.pause();
-          remoteAudio.srcObject = null;
-        }
-        dc = null;
-        pc = null;
-        currentAiBubble = null;
-        setSpeaking(false);
-        setConnected(false);
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        dc = null; pc = null; localStream = null;
       }
 
-      function sendText() {
+      function handleRealtimeMessage(event) {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+        const type = msg.type || '';
+        if (type.startsWith('response.')) beginTalk(); // fallback for all response.* events
+        if (type === 'response.created') beginTalk();
+        if (type === 'response.audio.delta') beginTalk();
+        if (type === 'response.audio_transcript.delta') beginTalk();
+        if (type === 'response.audio_transcript.done') addMsg('ai', msg.transcript || '(Transkript abgeschlossen)');
+        if (type === 'response.audio_transcript.delta' && msg.delta) {
+          if (!activeAiBubble) activeAiBubble = addMsg('ai', '');
+          activeAiBubble.textContent += msg.delta;
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+        if (type === 'response.text.delta' && msg.delta) {
+          if (!activeAiBubble) activeAiBubble = addMsg('ai', '');
+          activeAiBubble.textContent += msg.delta;
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+        if (type === 'conversation.item.input_audio_transcription.completed') {
+          addMsg('user', msg.transcript || '(Nutzer sprach)');
+        }
+        if (type === 'response.done') {
+          endTalkDelayed();
+          activeAiBubble = null;
+        }
+      }
+
+      sendBtn.addEventListener('click', () => {
+        if (!dc || dc.readyState !== 'open') return addMsg('system', 'Nicht verbunden.');
         const text = textInput.value.trim();
-        if (!text || !dc) return;
+        if (!text) return;
+        addMsg('user', text);
+        dc.send(JSON.stringify({ type:'conversation.item.create', item:{ type:'message', role:'user', content:[{type:'input_text', text}] } }));
+        dc.send(JSON.stringify({ type:'response.create' }));
+        textInput.value='';
+      });
 
-        dc.send(JSON.stringify({
-          type: 'conversation.item.create',
-          item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] }
-        }));
-        dc.send(JSON.stringify({ type: 'response.create' }));
-
-        appendBubble('me', text);
-        textInput.value = '';
-      }
-
-      async function uploadFile() {
-        const file = fileInput.files[0];
-        if (!file) {
-          uploadStatus.textContent = 'Please choose a file first.';
-          return;
+      fileInput.addEventListener('change', async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('file', file);
+        addMsg('system', `Upload startet: ${file.name}`);
+        try {
+          const res = await fetch('/upload', { method:'POST', body: fd });
+          const txt = await res.text();
+          addMsg(res.ok ? 'system' : 'system', `Upload ${res.ok ? 'ok' : 'fehlgeschlagen'}: ${txt}`);
+        } catch (e) {
+          addMsg('system', `Upload-Fehler: ${e.message || e}`);
+        } finally {
+          fileInput.value = '';
         }
+      });
 
-        const formData = new FormData();
-        formData.append('file', file);
+      startVoiceBtn.addEventListener('click', async () => {
+        popup.classList.remove('show');
+        await connectVoice({ fromUserGesture: true });
+      });
 
-        uploadStatus.textContent = 'Uploading...';
-        const res = await fetch('/upload', { method: 'POST', body: formData });
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          uploadStatus.textContent = data.error || 'Upload failed';
-          return;
-        }
-
-        uploadStatus.textContent = `Uploaded ${data.file.name}`;
-        appendBubble('me', `[File uploaded] ${data.file.name}`);
-      }
-
-      connectBtn.addEventListener('click', () => connect().catch((e) => {
-        setError(e.message);
-        disconnect();
-        connectBtn.disabled = false;
-      }));
-      disconnectBtn.addEventListener('click', disconnect);
-      sendBtn.addEventListener('click', sendText);
-      uploadBtn.addEventListener('click', uploadFile);
-      textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendText(); });
-
-      chatHandle.addEventListener('click', () => openChat(!chatSheet.classList.contains('open')));
-      chatSheet.addEventListener('touchstart', (e) => { dragStartY = e.touches[0].clientY; }, { passive: true });
-      chatSheet.addEventListener('touchend', (e) => {
-        const delta = dragStartY - e.changedTouches[0].clientY;
-        if (delta > 30) openChat(true);
-        if (delta < -30) openChat(false);
-      }, { passive: true });
+      connectVoice();
     </script>
   </body>
 </html>
