@@ -1,0 +1,9 @@
+- Arbeite immer vom aktuellen main aus.
+- Erstelle für jede Änderung einen neuen Branch.
+- Erstelle immer einen Pull Request.
+- Aktiviere Auto-Merge.
+- Nutze bevorzugt Squash Merge.
+- Verwende keine alten PRs weiter.
+- Wenn Auto-Merge nicht möglich ist, gib den PR-Link und den genauen Grund aus.
+- Teste vor jedem PR mindestens npm install und node --check server.js.
+- Nach Änderungen an public/index.html prüfe, dass die Realtime-Events response.audio.delta, response.audio_transcript.delta, response.created und response.done behandelt werden.
