@@ -1,19 +1,27 @@
-app = "engelmann-voice-agent"
-primary_region = "fra"
+# fly.toml app configuration file generated for engelmann-voice-agent on 2026-05-23T12:47:26Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'engelmann-voice-agent'
+primary_region = 'fra'
+
+[build]
 
 [env]
-  PORT = "8080"
-  OPENAI_REALTIME_MODEL = "gpt-realtime"
+  OPENAI_REALTIME_MODEL = 'gpt-realtime'
+  PORT = '8080'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1
-  memory = "1gb"
+  memory_mb = 256
