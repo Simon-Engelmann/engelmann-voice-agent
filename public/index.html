@@ -1,97 +1,74 @@
 <!doctype html>
 <html lang="de">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Voice Avatar</title>
-    <style>
-      :root { --bg:#f6f7fb; --text:#1d1d1f; --muted:#6e6e73; --line:rgba(60,60,67,.14); --card:rgba(255,255,255,.9); --blue:#007aff; --shadow:0 14px 40px rgba(0,0,0,.1);}*{box-sizing:border-box}html,body{height:100%;margin:0}
-      body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;background:radial-gradient(circle at 20% 8%,#fff 0,var(--bg) 72%);color:var(--text);overflow:hidden}
-      .app{height:100%;padding:max(16px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));display:flex;flex-direction:column}
-      .status{font-size:13px;color:var(--muted);text-align:center;min-height:20px}
-      .stage{flex:1;display:grid;place-items:center;position:relative}
-      .avatar{width:min(76vw,360px);aspect-ratio:1/1;filter:drop-shadow(0 20px 26px rgba(0,0,0,.12))}
-      svg{width:100%;height:100%}.float{animation:float 5s ease-in-out infinite}.breathe{animation:breathe 4s ease-in-out infinite}.head{animation:nod 6s ease-in-out infinite;transform-origin:50% 48%}.mouth{transform-origin:50% 67%}
-      .talking .mouth{animation:talk .2s ease-in-out infinite alternate}.talking .head{animation:active .8s ease-in-out infinite alternate}.talking .glow{opacity:.8}.glow{opacity:.3;transition:opacity .2s}
-      @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}@keyframes nod{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(1.8deg)}}@keyframes active{from{transform:rotate(-2deg)}to{transform:rotate(2deg)}}@keyframes talk{from{transform:scaleY(.5)}to{transform:scaleY(1.25)}}
-      .hint{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:10px 14px;box-shadow:var(--shadow);font-size:14px}
-      .popup{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.22);backdrop-filter:blur(6px);z-index:50}.popup.show{display:grid}
-      .popcard{width:min(90vw,340px);background:rgba(255,255,255,.94);border-radius:24px;padding:20px;box-shadow:var(--shadow);text-align:center}.popcard p{color:var(--muted)}
-      button{border:none;background:var(--blue);color:#fff;border-radius:14px;min-height:46px;padding:10px 16px;font-weight:600;font-size:16px}
-      .sheet{position:fixed;left:0;right:0;bottom:0;height:min(72vh,640px);background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:24px 24px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.12);transform:translateY(calc(100% - 54px));transition:transform .26s ease;display:flex;flex-direction:column}
-      .sheet.open{transform:translateY(0)}.grab{width:56px;height:6px;border-radius:99px;background:#d1d1d6;margin:10px auto 8px}.title{text-align:center;font-size:14px;font-weight:600}
-      .msgs{flex:1;overflow:auto;padding:10px 14px;display:flex;flex-direction:column;gap:10px}.msg{max-width:86%;border-radius:18px;padding:10px 12px;font-size:14px;line-height:1.35;white-space:pre-wrap;box-shadow:0 4px 10px rgba(0,0,0,.05)}.msg.user{align-self:flex-end;background:#e9f2ff}.msg.ai{align-self:flex-start;background:#f2f2f7}.msg.system{align-self:center;background:#fff6d5;color:#7a5b00}
-      .compose{padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);display:grid;gap:8px}.row{display:flex;gap:8px}input[type=text]{flex:1;min-height:44px;border-radius:13px;border:1px solid var(--line);padding:0 12px;font-size:15px}#file{display:none}.upload{min-height:44px;border-radius:13px;border:1px solid var(--line);display:grid;place-items:center;background:#fff}
-    </style>
-  </head>
-  <body>
-    <main class="app">
-      <div id="status" class="status">Initialisiere Sprachmodus…</div>
-      <section class="stage">
-        <div id="avatar" class="avatar">
-          <svg viewBox="0 0 300 300" aria-label="Avatar">
-            <defs><radialGradient id="face" cx="50%" cy="35%" r="70%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebedf3"/></radialGradient><linearGradient id="shirt" x1="0" x2="1"><stop offset="0" stop-color="#dbe7ff"/><stop offset="1" stop-color="#c5dafd"/></linearGradient></defs>
-            <g class="float"><ellipse class="glow" cx="150" cy="252" rx="74" ry="18" fill="#8bb8ff"/><g class="breathe"><ellipse cx="150" cy="228" rx="62" ry="44" fill="url(#shirt)"/><g class="head"><circle cx="150" cy="130" r="64" fill="url(#face)" stroke="#d7d9df"/><circle cx="126" cy="120" r="6" fill="#2b2b2f"/><circle cx="174" cy="120" r="6" fill="#2b2b2f"/><path d="M124 150 C136 162, 164 162, 176 150" stroke="#9a6f5f" stroke-width="4" fill="none" stroke-linecap="round"/><ellipse class="mouth" cx="150" cy="158" rx="14" ry="8" fill="#9d4f4f"/></g></g></g>
-          </svg>
-        </div>
-        <div class="hint">Swipe ↑ für Chat</div>
-      </section>
-    </main>
-
-    <section id="sheet" class="sheet">
-      <div class="grab"></div><div class="title">Dialog</div><div id="msgs" class="msgs"></div>
-      <div class="compose"><div class="row"><input id="text" type="text" placeholder="Nachricht schreiben…"/><button id="send">Senden</button></div><div class="row"><label for="file" class="upload">Datei/Fotos hochladen</label><input id="file" type="file"/></div></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Voice Avatar</title>
+  <style>
+    :root{--bg:#f6f7fb;--text:#1d1d1f;--muted:#6e6e73;--line:rgba(60,60,67,.14);--card:rgba(255,255,255,.92);--blue:#007aff;--shadow:0 14px 40px rgba(0,0,0,.1)}*{box-sizing:border-box}html,body{height:100%;margin:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;background:radial-gradient(circle at 20% 8%,#fff 0,var(--bg) 72%);color:var(--text);overflow:hidden}
+    .app{height:100%;padding:max(16px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));display:flex;flex-direction:column}
+    .top{display:flex;justify-content:center;align-items:center;gap:8px;min-height:34px}
+    .pill{border:1px solid var(--line);border-radius:999px;padding:7px 12px;background:var(--card);font-size:13px;color:var(--muted);box-shadow:0 4px 16px rgba(0,0,0,.05)}
+    .admin{display:none;background:#e9f2ff;color:#0a4da8;cursor:pointer;font-weight:600}.admin.show{display:inline-block}
+    .stage{flex:1;display:grid;place-items:center;position:relative}.avatar{width:min(76vw,360px);aspect-ratio:1/1;filter:drop-shadow(0 20px 26px rgba(0,0,0,.12))}
+    svg{width:100%;height:100%}.float{animation:float 5s ease-in-out infinite}.breathe{animation:breathe 4s ease-in-out infinite}.head{animation:nod 6s ease-in-out infinite;transform-origin:50% 48%}.mouth{transform-origin:50% 67%}
+    .talking .mouth{animation:talk .2s ease-in-out infinite alternate}.talking .head{animation:active .8s ease-in-out infinite alternate}.talking .glow{opacity:.8}.glow{opacity:.3;transition:opacity .2s}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}@keyframes nod{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(1.8deg)}}@keyframes active{from{transform:rotate(-2deg)}to{transform:rotate(2deg)}}@keyframes talk{from{transform:scaleY(.5)}to{transform:scaleY(1.25)}}
+    .hint{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:10px 14px;box-shadow:var(--shadow);font-size:14px}
+    .sheet{position:fixed;left:0;right:0;bottom:0;height:min(66vh,560px);background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:24px 24px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.12);transform:translateY(calc(100% - 54px));transition:transform .26s ease;display:flex;flex-direction:column}
+    .sheet.open{transform:translateY(0)}.grab{width:56px;height:6px;border-radius:99px;background:#d1d1d6;margin:10px auto 8px}.title{text-align:center;font-size:14px;font-weight:600}
+    .msgs{flex:1;overflow:auto;padding:10px 14px;display:flex;flex-direction:column;gap:10px}.msg{max-width:86%;border-radius:18px;padding:10px 12px;font-size:14px;line-height:1.35;white-space:pre-wrap;box-shadow:0 4px 10px rgba(0,0,0,.05)}.msg.user{align-self:flex-end;background:#e9f2ff}.msg.ai{align-self:flex-start;background:#f2f2f7}.msg.system{align-self:center;background:#fff6d5;color:#7a5b00}
+    .popup{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.22);backdrop-filter:blur(6px);z-index:50}.popup.show{display:grid}
+    .card{width:min(90vw,340px);background:rgba(255,255,255,.95);border-radius:24px;padding:20px;box-shadow:var(--shadow);text-align:center}.card p{color:var(--muted);margin:8px 0 14px}
+    button,input{font:inherit}button{border:none;background:var(--blue);color:#fff;border-radius:14px;min-height:46px;padding:10px 16px;font-weight:600;width:100%}
+    .ghost{margin-top:8px;background:#f2f2f7;color:#1d1d1f}.pin{width:100%;min-height:44px;border-radius:12px;border:1px solid var(--line);padding:0 12px;margin-bottom:10px;text-align:center;letter-spacing:2px}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <div class="top"><div id="status" class="pill">Verbinde...</div><div id="adminPill" class="pill admin">Admin aktiv</div></div>
+    <section class="stage">
+      <div id="avatar" class="avatar"><svg viewBox="0 0 300 300" aria-label="Avatar"><defs><radialGradient id="face" cx="50%" cy="35%" r="70%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ebedf3"/></radialGradient><linearGradient id="shirt" x1="0" x2="1"><stop offset="0" stop-color="#dbe7ff"/><stop offset="1" stop-color="#c5dafd"/></linearGradient></defs><g class="float"><ellipse class="glow" cx="150" cy="252" rx="74" ry="18" fill="#8bb8ff"/><g class="breathe"><ellipse cx="150" cy="228" rx="62" ry="44" fill="url(#shirt)"/><g class="head"><circle cx="150" cy="130" r="64" fill="url(#face)" stroke="#d7d9df"/><circle cx="126" cy="120" r="6" fill="#2b2b2f"/><circle cx="174" cy="120" r="6" fill="#2b2b2f"/><path d="M124 150 C136 162, 164 162, 176 150" stroke="#9a6f5f" stroke-width="4" fill="none" stroke-linecap="round"/><ellipse class="mouth" cx="150" cy="158" rx="14" ry="8" fill="#9d4f4f"/></g></g></g></svg></div>
+      <div class="hint">Swipe ↑ für Verlauf</div>
     </section>
-
-    <div id="popup" class="popup"><div class="popcard"><h3>Sprachmodus blockiert</h3><p>Safari/iOS benötigt eine Nutzeraktion für Mikrofon/Audio.</p><button id="start">Sprachmodus starten</button></div></div>
-
-    <script>
-      const DEFAULT_INSTRUCTIONS = "Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, außer der Nutzer wünscht eine andere Sprache. Antworte natürlich, klar und knapp.";
-      const statusEl = document.getElementById('status'); const avatar = document.getElementById('avatar'); const msgs = document.getElementById('msgs');
-      const sheet = document.getElementById('sheet'); const text = document.getElementById('text'); const send = document.getElementById('send'); const file = document.getElementById('file');
-      const popup = document.getElementById('popup'); const start = document.getElementById('start');
-      let pc, dc, stream, connecting = false, stopTimer, aiBubble = null;
-      const audio = new Audio(); audio.autoplay = true; audio.playsInline = true;
-      const setStatus=(t,e=false)=>{statusEl.textContent=t;statusEl.style.color=e?'#c62828':'var(--muted)'};
-      const add=(role,t)=>{const e=document.createElement('div');e.className=`msg ${role}`;e.textContent=t;msgs.appendChild(e);msgs.scrollTop=msgs.scrollHeight;return e};
-      const talkOn=()=>{clearTimeout(stopTimer);avatar.classList.add('talking')};
-      const talkOff=()=>{clearTimeout(stopTimer);stopTimer=setTimeout(()=>avatar.classList.remove('talking'),1500)};
-      let y=0; sheet.addEventListener('touchstart',e=>y=e.touches[0].clientY,{passive:true}); sheet.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientY-y; if(d<-40) sheet.classList.add('open'); if(d>40) sheet.classList.remove('open');},{passive:true});
-
-      function cleanup(){if(dc)dc.close(); if(pc)pc.close(); if(stream)stream.getTracks().forEach(t=>t.stop()); dc=null; pc=null; stream=null;}
-      function onEvent(evt){ let m; try{m=JSON.parse(evt.data)}catch{return;} const t=m.type||'';
-        if(t.startsWith('response.')) talkOn();
-        if(t==='response.created') talkOn();
-        if(t==='response.audio.delta') talkOn();
-        if(t==='response.audio_transcript.delta') talkOn();
-        if(t==='response.audio_transcript.delta'&&m.delta){if(!aiBubble)aiBubble=add('ai',''); aiBubble.textContent+=m.delta; msgs.scrollTop=msgs.scrollHeight;}
-        if(t==='response.audio_transcript.done'&&m.transcript){if(!aiBubble)aiBubble=add('ai',''); if(!aiBubble.textContent) aiBubble.textContent=m.transcript;}
-        if(t==='response.text.delta'&&m.delta){if(!aiBubble)aiBubble=add('ai',''); aiBubble.textContent+=m.delta; msgs.scrollTop=msgs.scrollHeight;}
-        if(t==='conversation.item.input_audio_transcription.completed') add('user',m.transcript||'(Nutzer sprach)');
-        if(t==='response.done'){talkOff(); aiBubble=null;}
-      }
-
-      async function connect(user=false){ if(connecting) return; connecting=true; setStatus('Verbinde…');
-        try{
-          stream=await navigator.mediaDevices.getUserMedia({audio:true});
-          pc=new RTCPeerConnection(); stream.getTracks().forEach(track=>pc.addTrack(track,stream));
-          pc.ontrack=(e)=>{audio.srcObject=e.streams[0]; if(user) audio.play().catch(()=>{});};
-          dc=pc.createDataChannel('oai-events'); dc.onmessage=onEvent;
-          const sRes=await fetch('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instructions:DEFAULT_INSTRUCTIONS})});
-          const sBody=await sRes.text(); let sData={}; try{sData=JSON.parse(sBody)}catch{}
-          if(!sRes.ok) throw new Error(`/session Fehler ${sRes.status}: ${sBody}`);
-          const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
-          const r=await fetch('https://api.openai.com/v1/realtime?model='+encodeURIComponent(sData.model),{method:'POST',headers:{Authorization:`Bearer ${sData.client_secret.value}`,'Content-Type':'application/sdp'},body:offer.sdp});
-          const body=await r.text(); if(!r.ok) throw new Error(`SDP/OpenAI Fehler ${r.status}: ${body}`);
-          await pc.setRemoteDescription({type:'answer',sdp:body}); setStatus('Verbunden');
-        } catch(err){ setStatus(err.message||'Mikrofon/Verbindung fehlgeschlagen',true); add('system','Fehler: '+(err.message||String(err))); popup.classList.add('show'); cleanup(); }
-        finally{ connecting=false; }
-      }
-
-      send.addEventListener('click',()=>{if(!dc||dc.readyState!=='open') return add('system','Nicht verbunden.'); const v=text.value.trim(); if(!v) return; add('user',v); dc.send(JSON.stringify({type:'conversation.item.create',item:{type:'message',role:'user',content:[{type:'input_text',text:v}]}})); dc.send(JSON.stringify({type:'response.create'})); text.value='';});
-      file.addEventListener('change',async()=>{const f=file.files?.[0]; if(!f) return; const fd=new FormData(); fd.append('file',f); add('system',`Upload startet: ${f.name}`); try{const r=await fetch('/upload',{method:'POST',body:fd}); const b=await r.text(); add('system',`Upload ${r.ok?'ok':'fehlgeschlagen'}: ${b}`);}catch(e){add('system',`Upload-Fehler: ${e.message||e}`);} finally{file.value='';}});
-      start.addEventListener('click',async()=>{popup.classList.remove('show'); await connect(true);});
-      connect();
-    </script>
-  </body>
+  </main>
+  <section id="sheet" class="sheet"><div class="grab"></div><div class="title">Verlauf</div><div id="msgs" class="msgs"></div></section>
+  <div id="tapPopup" class="popup"><div class="card"><p>Zum Starten einmal tippen</p><button id="tapBtn">Einmal tippen</button></div></div>
+  <div id="pinPopup" class="popup"><div class="card"><h3>Admin-Modus</h3><p>PIN eingeben, um Änderungen zu erlauben.</p><input id="pinInput" class="pin" type="password" inputmode="numeric" placeholder="PIN" /><button id="pinOk">Bestätigen</button><button id="pinCancel" class="ghost">Abbrechen</button></div></div>
+<script>
+const DEFAULT_INSTRUCTIONS="Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, außer der Nutzer wünscht eine andere Sprache. Antworte natürlich, klar und knapp.";
+const TRIGGER="frosch frosch";
+const statusEl=document.getElementById('status'),adminPill=document.getElementById('adminPill'),avatar=document.getElementById('avatar'),msgs=document.getElementById('msgs'),sheet=document.getElementById('sheet');
+const tapPopup=document.getElementById('tapPopup'),tapBtn=document.getElementById('tapBtn'),pinPopup=document.getElementById('pinPopup'),pinInput=document.getElementById('pinInput'),pinOk=document.getElementById('pinOk'),pinCancel=document.getElementById('pinCancel');
+let pc,dc,stream,connecting=false,stopTimer,aiBubble=null,adminMode=false,adminPin='';
+const audio=new Audio();audio.autoplay=true;audio.playsInline=true;
+const setStatus=t=>statusEl.textContent=t;const add=(r,t)=>{const e=document.createElement('div');e.className=`msg ${r}`;e.textContent=t;msgs.appendChild(e);msgs.scrollTop=msgs.scrollHeight;return e};
+const talkOn=()=>{clearTimeout(stopTimer);avatar.classList.add('talking')};const talkOff=()=>{clearTimeout(stopTimer);stopTimer=setTimeout(()=>avatar.classList.remove('talking'),1500)};
+let y=0;sheet.addEventListener('touchstart',e=>y=e.touches[0].clientY,{passive:true});sheet.addEventListener('touchend',e=>{const d=e.changedTouches[0].clientY-y;if(d<-40)sheet.classList.add('open');if(d>40)sheet.classList.remove('open')},{passive:true});
+function cleanup(){if(dc)dc.close();if(pc)pc.close();if(stream)stream.getTracks().forEach(t=>t.stop());dc=null;pc=null;stream=null;}
+function showAdmin(on){adminMode=on;adminPill.classList.toggle('show',on);setStatus(on?'Admin aktiv':'Sprich jetzt');}
+function looksLikeChangeRequest(t){return /(mach|ändere|entferne|größe|groesser|größer|farbe|blau|avatar|text)/i.test(t)}
+async function createChangeRequest(text){try{const r=await fetch('/change-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,pin:adminPin})});const b=await r.text();let data={};try{data=JSON.parse(b)}catch{};const link=data.url||data.html_url||b;add('system',`Änderung erstellt: ${link}`)}catch(e){add('system',`Änderung fehlgeschlagen: ${e.message||e}`)}}
+function handleTranscript(transcript){const raw=(transcript||'').trim();if(!raw)return;const t=raw.toLowerCase();add('user',raw);
+if(t.includes(TRIGGER)){pinPopup.classList.add('show');add('ai','Admin-Modus. Bitte PIN eingeben.');return;}
+if(adminMode&&looksLikeChangeRequest(raw)){createChangeRequest(raw);return;}}
+function onEvent(evt){let m;try{m=JSON.parse(evt.data)}catch{return}const t=m.type||'';
+if(t.startsWith('response.'))talkOn();if(t==='response.created')talkOn();if(t==='response.audio.delta')talkOn();if(t==='response.audio_transcript.delta')talkOn();
+if(t==='response.audio_transcript.delta'&&m.delta){if(!aiBubble)aiBubble=add('ai','');aiBubble.textContent+=m.delta;msgs.scrollTop=msgs.scrollHeight}
+if(t==='response.audio_transcript.done'&&m.transcript){if(!aiBubble)aiBubble=add('ai','');if(!aiBubble.textContent)aiBubble.textContent=m.transcript}
+if(t==='conversation.item.input_audio_transcription.completed')handleTranscript(m.transcript||'');
+if(t==='response.done'){talkOff();aiBubble=null;}}
+async function connect(user=false){if(connecting)return;connecting=true;setStatus('Verbinde...');
+try{stream=await navigator.mediaDevices.getUserMedia({audio:true});pc=new RTCPeerConnection();stream.getTracks().forEach(track=>pc.addTrack(track,stream));pc.ontrack=e=>{audio.srcObject=e.streams[0];if(user)audio.play().catch(()=>{})};dc=pc.createDataChannel('oai-events');dc.onmessage=onEvent;
+const s=await fetch('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instructions:DEFAULT_INSTRUCTIONS})});const sb=await s.text();let sd={};try{sd=JSON.parse(sb)}catch{}if(!s.ok)throw new Error(`/session Fehler`);
+const offer=await pc.createOffer();await pc.setLocalDescription(offer);const rr=await fetch('https://api.openai.com/v1/realtime?model='+encodeURIComponent(sd.model),{method:'POST',headers:{Authorization:`Bearer ${sd.client_secret.value}`,'Content-Type':'application/sdp'},body:offer.sdp});const rb=await rr.text();if(!rr.ok)throw new Error(`OpenAI Fehler: ${rb}`);await pc.setRemoteDescription({type:'answer',sdp:rb});setStatus(adminMode?'Admin aktiv':'Sprich jetzt');}
+catch(e){setStatus('Tippen zum Starten');add('system',`Fehler: ${e.message||e}`);tapPopup.classList.add('show');cleanup()}finally{connecting=false}}
+adminPill.addEventListener('click',()=>{showAdmin(false);add('system','Admin-Modus beendet.')});
+pinOk.addEventListener('click',()=>{adminPin=pinInput.value.trim();if(!adminPin)return;pinPopup.classList.remove('show');pinInput.value='';showAdmin(true);add('system','Admin-Modus aktiv.')});
+pinCancel.addEventListener('click',()=>{pinPopup.classList.remove('show');pinInput.value='';});
+tapBtn.addEventListener('click',async()=>{tapPopup.classList.remove('show');await connect(true)});
+document.addEventListener('DOMContentLoaded',()=>connect());
+</script>
+</body>
 </html>
