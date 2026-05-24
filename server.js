@@ -15,9 +15,43 @@ const upload = multer({
 const PORT = process.env.PORT || 8080;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2';
+const OPENAI_REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'shimmer';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO || 'Simon-Engelmann/engelmann-voice-agent';
 const ADMIN_PIN = process.env.ADMIN_PIN;
+
+const VOICE_AGENT_INSTRUCTIONS = `
+Du bist ein deutscher Voice-Agent für Simon.
+
+Stimme und Sprechweise:
+- Sprich auf Deutsch, außer Simon verlangt ausdrücklich eine andere Sprache.
+- Klinge menschlich, direkt, trocken-humorig und entspannt.
+- Sehr klare, kurze Sätze.
+- Keine KI-Floskeln.
+- Kein "Gerne", kein "Natürlich", kein "Als KI".
+- Maximal 1 bis 3 Sätze pro Antwort, außer Simon fragt nach Details.
+- Antworte wie ein nüchterner, wacher Mensch mit trockenem Humor.
+- Kurze Reaktionen sind erlaubt: "Stimmt.", "Nee.", "Das wird nix.", "Solide Idee.", "Knapp daneben."
+- Wenn Simon offensichtlich Blödsinn sagt, widersprich knapp und ruhig. Kein Vortrag.
+- Wenn Simon dich unterbricht, hör sofort auf und reagiere auf das Neue.
+- Wenn du unsicher bist, sag es kurz.
+
+Humor:
+- Trockener Humor, nicht albern.
+- Kleine Sprüche sind erlaubt, aber nie länger als ein Satz.
+- Beispiel-Stil: "Mutig. Nicht schlau, aber mutig."
+- Nicht übertreiben.
+
+Begrüßung:
+- Wenn eine neue Session startet, begrüße Simon mit Vornamen.
+- Jedes Mal anders.
+- Locker, kurz, frisch.
+- Danach direkt bereit sein.
+
+Admin-Modus:
+- Wenn Simon "Frosch Frosch" sagt, bestätige kurz: "Admin-Modus. PIN bitte."
+- Danach keine Änderung ausführen, bevor der Admin-Modus aktiv ist.
+`.trim();
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -33,36 +67,62 @@ function getRealtimeModel() {
   return REALTIME_MODEL;
 }
 
+function makeRealtimeSession(req, voiceOverride) {
+  return {
+    type: 'realtime',
+    model: getRealtimeModel(),
+    output_modalities: ['audio'],
+    instructions: req.body?.instructions || VOICE_AGENT_INSTRUCTIONS,
+    audio: {
+      input: {
+        turn_detection: {
+          type: 'semantic_vad',
+          create_response: true,
+          interrupt_response: true
+        },
+        transcription: {
+          model: 'gpt-4o-mini-transcribe'
+        }
+      },
+      output: {
+        voice: voiceOverride || req.body?.voice || OPENAI_REALTIME_VOICE
+      }
+    }
+  };
+}
+
+async function createRealtimeClientSecret(session) {
+  const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+      'OpenAI-Safety-Identifier': 'engelmann-voice-agent'
+    },
+    body: JSON.stringify({ session })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  return { response, data };
+}
+
 app.post('/session', async (req, res) => {
   if (!OPENAI_API_KEY) {
     return res.status(500).json({ error: 'OPENAI_API_KEY missing on server.' });
   }
 
-  const session = {
-    type: 'realtime',
-    model: getRealtimeModel(),
-    instructions:
-      req.body?.instructions ||
-      'Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, ausser der Nutzer wuenscht eine andere Sprache. Antworte natuerlich, klar und knapp.',
-    audio: {
-      output: {
-        voice: req.body?.voice || 'marin'
-      }
-    }
-  };
-
   try {
-    const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Safety-Identifier': 'engelmann-voice-agent'
-      },
-      body: JSON.stringify({ session })
-    });
+    let session = makeRealtimeSession(req);
+    let { response, data } = await createRealtimeClientSecret(session);
 
-    const data = await response.json().catch(() => ({}));
+    const serializedError = JSON.stringify(data).toLowerCase();
+    const voice = session.audio?.output?.voice;
+
+    if (!response.ok && voice !== 'marin' && serializedError.includes('voice')) {
+      session = makeRealtimeSession(req, 'marin');
+      ({ response, data } = await createRealtimeClientSecret(session));
+    }
+
     if (!response.ok) {
       return res.status(response.status).json(data);
     }
@@ -70,10 +130,14 @@ app.post('/session', async (req, res) => {
     return res.json({
       ...data,
       client_secret: { value: data.value },
-      model: session.model
+      model: session.model,
+      voice: session.audio.output.voice
     });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to create realtime client secret', details: String(error) });
+    return res.status(500).json({
+      error: 'Failed to create realtime client secret',
+      details: String(error)
+    });
   }
 });
 
@@ -140,6 +204,7 @@ async function githubJson(url, options = {}) {
 
   const text = await response.text();
   let data = {};
+
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
@@ -238,15 +303,26 @@ app.post('/change-request', async (req, res) => {
 
   try {
     let { response, data } = await createGitHubIssue({ transcript, summary }, true);
+
     if (!response.ok && response.status === 422) {
       ({ response, data } = await createGitHubIssue({ transcript, summary }, false));
     }
+
     if (!response.ok) {
       return res.status(response.status).json({ error: 'GitHub issue creation failed.', details: data });
     }
-    return res.json({ ok: true, issueUrl: data.html_url, issueNumber: data.number, title: data.title });
+
+    return res.json({
+      ok: true,
+      issueUrl: data.html_url,
+      issueNumber: data.number,
+      title: data.title
+    });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to create GitHub issue.', details: String(error) });
+    return res.status(500).json({
+      error: 'Failed to create GitHub issue.',
+      details: String(error)
+    });
   }
 });
 
@@ -302,6 +378,7 @@ app.post('/admin/apply-config-change', async (req, res) => {
     }
 
     const content = Buffer.from(JSON.stringify(nextConfig, null, 2) + '\n', 'utf8').toString('base64');
+
     await githubJson(`${repoApi}/contents/${configPath}`, {
       method: 'PUT',
       body: JSON.stringify({
