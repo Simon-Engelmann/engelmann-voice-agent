@@ -119,64 +119,7 @@ function makeIssueBody({ transcript, summary }) {
   ].join('\n');
 }
 
-async function createGitHubIssue(payload, includeLabels = true) {
-  const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/issues`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${GITHUB_TOKEN}`,
-      Accept: 'application/vnd.github+json',
-      'Content-Type': 'application/json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'engelmann-voice-agent'
-    },
-    body: JSON.stringify({
-      title: makeIssueTitle(payload.summary, payload.transcript),
-      body: makeIssueBody(payload),
-      labels: includeLabels ? ['ai-change'] : undefined
-    })
-  });
-
-  const data = await response.json().catch(() => ({}));
-  return { response, data };
-}
-
-app.post('/change-request', async (req, res) => {
-  const { transcript, summary, adminPin } = req.body || {};
-
-  if (!ADMIN_PIN) {
-    return res.status(500).json({ error: 'ADMIN_PIN missing on server.' });
-  }
-
-  if (!GITHUB_TOKEN || !GITHUB_REPO) {
-    return res.status(500).json({ error: 'GITHUB_TOKEN or GITHUB_REPO missing on server.' });
-  }
-
-  if (String(adminPin || '') !== String(ADMIN_PIN)) {
-    return res.status(401).json({ error: 'Invalid admin PIN.' });
-  }
-
-  if (!cleanText(transcript) && !cleanText(summary)) {
-    return res.status(400).json({ error: 'transcript or summary required.' });
-  }
-
-  try {
-    let { response, data } = await createGitHubIssue({ transcript, summary }, true);
-
-    if (!response.ok && response.status === 422) {
-      ({ response, data } = await createGitHubIssue({ transcript, summary }, false));
-    }
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: 'GitHub issue creation failed.', details: data });
-    }
-
-    return res.json({ ok: true, issueUrl: data.html_url, issueNumber: data.number, title: data.title });
-  } catch (error) {
-    return res.status(500).json({ error: 'Failed to create GitHub issue.', details: String(error) });
-  }
-});
-
-app.post('/upload', upload.single('file'), (req, res) => {function githubHeaders() {
+function githubHeaders() {
   return {
     Authorization: `Bearer ${GITHUB_TOKEN}`,
     Accept: 'application/vnd.github+json',
@@ -213,11 +156,25 @@ async function githubJson(url, options = {}) {
   return data;
 }
 
+async function createGitHubIssue(payload, includeLabels = true) {
+  const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/issues`, {
+    method: 'POST',
+    headers: githubHeaders(),
+    body: JSON.stringify({
+      title: makeIssueTitle(payload.summary, payload.transcript),
+      body: makeIssueBody(payload),
+      labels: includeLabels ? ['ai-change'] : undefined
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  return { response, data };
+}
+
 function parseConfigChange(command, currentConfig) {
   const text = cleanText(command, 2000).toLowerCase();
   const nextConfig = { ...currentConfig };
   const changes = [];
-
   const percentMatch = text.match(/(\d+)\s*(prozent|%)/);
   const percent = percentMatch ? Number(percentMatch[1]) / 100 : null;
 
@@ -257,11 +214,41 @@ function parseConfigChange(command, currentConfig) {
     changes.push('Theme auf light gesetzt');
   }
 
-  return {
-    nextConfig,
-    changes
-  };
+  return { nextConfig, changes };
 }
+
+app.post('/change-request', async (req, res) => {
+  const { transcript, summary, adminPin } = req.body || {};
+
+  if (!ADMIN_PIN) {
+    return res.status(500).json({ error: 'ADMIN_PIN missing on server.' });
+  }
+
+  if (!GITHUB_TOKEN || !GITHUB_REPO) {
+    return res.status(500).json({ error: 'GITHUB_TOKEN or GITHUB_REPO missing on server.' });
+  }
+
+  if (String(adminPin || '') !== String(ADMIN_PIN)) {
+    return res.status(401).json({ error: 'Invalid admin PIN.' });
+  }
+
+  if (!cleanText(transcript) && !cleanText(summary)) {
+    return res.status(400).json({ error: 'transcript or summary required.' });
+  }
+
+  try {
+    let { response, data } = await createGitHubIssue({ transcript, summary }, true);
+    if (!response.ok && response.status === 422) {
+      ({ response, data } = await createGitHubIssue({ transcript, summary }, false));
+    }
+    if (!response.ok) {
+      return res.status(response.status).json({ error: 'GitHub issue creation failed.', details: data });
+    }
+    return res.json({ ok: true, issueUrl: data.html_url, issueNumber: data.number, title: data.title });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to create GitHub issue.', details: String(error) });
+  }
+});
 
 app.post('/admin/apply-config-change', async (req, res) => {
   const { adminPin, command } = req.body || {};
@@ -286,23 +273,20 @@ app.post('/admin/apply-config-change', async (req, res) => {
     const repoApi = `https://api.github.com/repos/${GITHUB_REPO}`;
     const repo = await githubJson(repoApi);
     const baseBranch = repo.default_branch || 'main';
-
     const baseRef = await githubJson(`${repoApi}/git/ref/heads/${baseBranch}`);
-    const baseSha = baseRef.object.sha;
-
     const branchName = `voice-config-${Date.now()}`;
+
     await githubJson(`${repoApi}/git/refs`, {
       method: 'POST',
       body: JSON.stringify({
         ref: `refs/heads/${branchName}`,
-        sha: baseSha
+        sha: baseRef.object.sha
       })
     });
 
     const configPath = 'public/app-config.json';
     const file = await githubJson(`${repoApi}/contents/${configPath}?ref=${baseBranch}`);
     const currentConfig = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
-
     const { nextConfig, changes } = parseConfigChange(command, currentConfig);
 
     if (!changes.length || JSON.stringify(currentConfig) === JSON.stringify(nextConfig)) {
@@ -318,7 +302,6 @@ app.post('/admin/apply-config-change', async (req, res) => {
     }
 
     const content = Buffer.from(JSON.stringify(nextConfig, null, 2) + '\n', 'utf8').toString('base64');
-
     await githubJson(`${repoApi}/contents/${configPath}`, {
       method: 'PUT',
       body: JSON.stringify({
@@ -361,6 +344,8 @@ app.post('/admin/apply-config-change', async (req, res) => {
     });
   }
 });
+
+app.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
