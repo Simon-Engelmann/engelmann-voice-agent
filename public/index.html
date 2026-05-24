@@ -10,12 +10,15 @@
       --bg: #fbfbfd;
       --text: #1d1d1f;
       --muted: #6e6e73;
-      --line: rgba(0,0,0,.09);
+      --line: rgba(0,0,0,.08);
       --blue: #007aff;
       --green: #34c759;
       --red: #ff3b30;
-      --glass: rgba(255,255,255,.82);
+      --glass: rgba(255,255,255,.78);
       --avatar-scale: 1;
+      --mouth-scale: .35;
+      --voice-lift: 0px;
+      --voice-glow: .12;
     }
 
     * {
@@ -33,7 +36,7 @@
     body {
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at 50% 42%, #edf6ff 0, #ffffff 42%, var(--bg) 100%);
+        radial-gradient(circle at 50% 38%, rgba(219,236,255,.96) 0, rgba(255,255,255,1) 42%, var(--bg) 100%);
       color: var(--text);
     }
 
@@ -42,17 +45,35 @@
       --text: #f5f5f7;
       --muted: #a1a1a6;
       --line: rgba(255,255,255,.14);
-      --glass: rgba(28,28,30,.76);
+      --glass: rgba(28,28,30,.74);
       background:
-        radial-gradient(circle at 50% 42%, #172033 0, #0b0b0c 46%, #050506 100%);
+        radial-gradient(circle at 50% 38%, #172033 0, #0b0b0c 48%, #050506 100%);
     }
 
     .app {
+      position: relative;
       min-height: 100dvh;
       display: grid;
       place-items: center;
       padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
-      position: relative;
+      overflow: hidden;
+    }
+
+    .aurora {
+      position: absolute;
+      inset: -20%;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 25% 30%, rgba(0,122,255,.10), transparent 28%),
+        radial-gradient(circle at 72% 38%, rgba(52,199,89,.10), transparent 30%),
+        radial-gradient(circle at 50% 75%, rgba(90,200,250,.12), transparent 26%);
+      filter: blur(18px);
+      animation: aurora 12s ease-in-out infinite alternate;
+    }
+
+    @keyframes aurora {
+      from { transform: translate3d(-1%, -1%, 0) scale(1); }
+      to { transform: translate3d(1.5%, 1%, 0) scale(1.04); }
     }
 
     .top {
@@ -60,7 +81,7 @@
       top: max(14px, env(safe-area-inset-top));
       left: 50%;
       transform: translateX(-50%);
-      z-index: 25;
+      z-index: 30;
       display: flex;
       gap: 8px;
       align-items: center;
@@ -76,10 +97,11 @@
       border: 1px solid var(--line);
       border-radius: 999px;
       background: var(--glass);
-      backdrop-filter: blur(20px);
-      box-shadow: 0 8px 24px rgba(0,0,0,.05);
-      font-size: 13px;
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      box-shadow: 0 10px 28px rgba(0,0,0,.06);
       color: var(--muted);
+      font-size: 13px;
       white-space: nowrap;
     }
 
@@ -103,16 +125,17 @@
 
     .admin-pill {
       display: none;
-      color: #fff;
-      background: linear-gradient(135deg, #111, #3b3b40);
-      border-color: rgba(255,255,255,.18);
-      cursor: pointer;
-      border: 0;
       width: auto;
       min-height: 34px;
+      border: 0;
       padding: 7px 13px;
+      border-radius: 999px;
+      color: white;
+      background: linear-gradient(135deg, #111 0%, #3b3b40 100%);
       font-size: 13px;
       font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0,0,0,.12);
     }
 
     .admin .admin-pill {
@@ -127,9 +150,37 @@
       box-shadow: 0 0 0 5px rgba(52,199,89,.18);
     }
 
-    .avatar-shell {
-      transform: scale(var(--avatar-scale));
-      transition: transform .28s ease;
+    .stage {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: min(86vw, 430px);
+      height: min(86vw, 430px);
+      isolation: isolate;
+      transform:
+        translateY(var(--voice-lift))
+        scale(var(--avatar-scale));
+      transition: transform .22s ease;
+    }
+
+    .stage::before {
+      content: "";
+      position: absolute;
+      width: 74%;
+      height: 74%;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 42% 32%, rgba(255,255,255,.88), rgba(255,255,255,.42) 46%, rgba(0,122,255,.06) 72%, transparent 100%);
+      box-shadow:
+        0 32px 90px rgba(0, 72, 180, calc(.10 + var(--voice-glow))),
+        inset 0 1px 0 rgba(255,255,255,.88);
+      z-index: -1;
+      animation: halo 5.8s ease-in-out infinite;
+    }
+
+    @keyframes halo {
+      0%,100% { transform: scale(1); opacity: .92; }
+      50% { transform: scale(1.04); opacity: 1; }
     }
 
     .avatar-box {
@@ -137,57 +188,67 @@
       height: min(74vw, 370px);
       display: grid;
       place-items: center;
-      filter: drop-shadow(0 36px 40px rgba(37,70,120,.15));
+      filter: drop-shadow(0 34px 38px rgba(37,70,120,.16));
       animation: float 4.8s ease-in-out infinite;
     }
 
     .speaking .avatar-box {
-      animation: speakBody .58s ease-in-out infinite alternate;
+      animation: speakBody .54s ease-in-out infinite alternate;
     }
 
     svg {
       width: 100%;
       height: 100%;
+      overflow: visible;
     }
 
     .head {
-      animation: head 5.8s ease-in-out infinite;
-      transform-origin: 50% 42%;
+      animation: headIdle 5.6s ease-in-out infinite;
+      transform-origin: 50% 44%;
     }
 
     .body {
       animation: breathe 3.2s ease-in-out infinite;
-      transform-origin: 50% 68%;
+      transform-origin: 50% 70%;
     }
 
     .mouth {
-      transform-origin: 50% 50%;
-    }
-
-    .speaking .mouth {
-      animation: mouth .16s ease-in-out infinite alternate;
-    }
-
-    .speaking .head {
-      animation: speakHead .42s ease-in-out infinite alternate;
+      transform-box: fill-box;
+      transform-origin: center;
+      transform: scaleY(var(--mouth-scale));
+      transition: transform .055s linear;
     }
 
     .arm-left {
-      animation: armL 4s ease-in-out infinite;
+      animation: armLeftIdle 4s ease-in-out infinite;
       transform-origin: 48% 58%;
     }
 
     .arm-right {
-      animation: armR 4.4s ease-in-out infinite;
+      animation: armRightIdle 4.4s ease-in-out infinite;
       transform-origin: 52% 58%;
     }
 
+    .speaking .head {
+      animation: headTalk .42s ease-in-out infinite alternate;
+    }
+
     .speaking .arm-left {
-      animation: talkL .82s ease-in-out infinite alternate;
+      animation: armLeftTalk .78s ease-in-out infinite alternate;
     }
 
     .speaking .arm-right {
-      animation: talkR .78s ease-in-out infinite alternate;
+      animation: armRightTalk .74s ease-in-out infinite alternate;
+    }
+
+    .eye {
+      transform-origin: center;
+      animation: blink 5.6s infinite;
+    }
+
+    @keyframes blink {
+      0%, 92%, 100% { transform: scaleY(1); }
+      94%, 96% { transform: scaleY(.12); }
     }
 
     @keyframes float {
@@ -200,42 +261,37 @@
       50% { transform: scale(1.018); }
     }
 
-    @keyframes head {
+    @keyframes headIdle {
       0%,100% { transform: rotate(-1deg); }
       50% { transform: rotate(1.2deg); }
     }
 
     @keyframes speakBody {
       from { transform: translateY(0) scale(1); }
-      to { transform: translateY(-6px) scale(1.025); }
+      to { transform: translateY(-6px) scale(1.022); }
     }
 
-    @keyframes speakHead {
-      from { transform: rotate(-2deg) translateY(0); }
-      to { transform: rotate(2deg) translateY(-3px); }
+    @keyframes headTalk {
+      from { transform: rotate(-2.4deg) translateY(0); }
+      to { transform: rotate(2.4deg) translateY(-3px); }
     }
 
-    @keyframes mouth {
-      from { transform: scaleY(.45); opacity: .7; }
-      to { transform: scaleY(1.8); opacity: 1; }
-    }
-
-    @keyframes armL {
-      0%,100% { transform: rotate(0); }
+    @keyframes armLeftIdle {
+      0%,100% { transform: rotate(0deg); }
       50% { transform: rotate(2deg); }
     }
 
-    @keyframes armR {
-      0%,100% { transform: rotate(0); }
+    @keyframes armRightIdle {
+      0%,100% { transform: rotate(0deg); }
       50% { transform: rotate(-2deg); }
     }
 
-    @keyframes talkL {
+    @keyframes armLeftTalk {
       from { transform: rotate(-4deg); }
       to { transform: rotate(8deg); }
     }
 
-    @keyframes talkR {
+    @keyframes armRightTalk {
       from { transform: rotate(4deg); }
       to { transform: rotate(-8deg); }
     }
@@ -248,6 +304,7 @@
       color: #b0b0b7;
       font-size: 12px;
       text-align: center;
+      z-index: 5;
     }
 
     .hint::before {
@@ -271,7 +328,8 @@
       transition: transform .28s cubic-bezier(.2,.8,.2,1);
       border-radius: 30px 30px 0 0;
       background: rgba(255,255,255,.96);
-      backdrop-filter: blur(26px);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
       border: 1px solid var(--line);
       box-shadow: 0 -28px 70px rgba(0,0,0,.12);
       display: flex;
@@ -374,8 +432,9 @@
       place-items: center;
       padding: 22px;
       z-index: 60;
-      background: rgba(251,251,253,.64);
-      backdrop-filter: blur(10px);
+      background: rgba(251,251,253,.66);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
     }
 
     body.dark .modal {
@@ -403,6 +462,7 @@
     .card h1 {
       margin: 0 0 8px;
       font-size: 24px;
+      letter-spacing: -.02em;
     }
 
     .card p {
@@ -471,6 +531,8 @@
 
 <body>
   <div id="root" class="app">
+    <div class="aurora"></div>
+
     <div class="top">
       <div id="statusPill" class="pill">
         <span class="dot"></span>
@@ -483,7 +545,7 @@
       </button>
     </div>
 
-    <div class="avatar-shell">
+    <div class="stage">
       <div class="avatar-box" aria-label="Avatar">
         <svg viewBox="0 0 360 360" role="img" aria-label="Cartoon Avatar">
           <defs>
@@ -491,44 +553,66 @@
               <stop offset="0" stop-color="#ffe0bf"/>
               <stop offset="1" stop-color="#f3a56f"/>
             </radialGradient>
+
             <linearGradient id="shirt" x1="0" x2="1" y1="0" y2="1">
               <stop offset="0" stop-color="#2f7bff"/>
               <stop offset="1" stop-color="#0b2d68"/>
             </linearGradient>
+
             <linearGradient id="hair" x1="0" x2="1">
               <stop offset="0" stop-color="#7a3a12"/>
               <stop offset="1" stop-color="#23130b"/>
             </linearGradient>
+
+            <radialGradient id="cheek" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stop-color="#ff8f8f" stop-opacity=".38"/>
+              <stop offset="1" stop-color="#ff8f8f" stop-opacity="0"/>
+            </radialGradient>
           </defs>
 
-          <ellipse cx="180" cy="326" rx="76" ry="14" fill="#dce7f7" opacity=".75"/>
+          <ellipse cx="180" cy="326" rx="78" ry="15" fill="#dce7f7" opacity=".72"/>
 
           <g class="body">
-            <path d="M128 208c10-31 32-49 52-49s42 18 52 49l21 88c2 9-4 17-13 17H120c-9 0-15-8-13-17l21-88z" fill="url(#shirt)"/>
+            <path d="M128 209c10-32 32-50 52-50s42 18 52 50l21 87c2 9-4 17-13 17H120c-9 0-15-8-13-17l21-87z" fill="url(#shirt)"/>
             <path d="M151 168c13 14 45 14 58 0l-7 32h-44l-7-32z" fill="url(#skin)"/>
             <path d="M151 209h58" stroke="#fff" stroke-width="4" opacity=".75"/>
+
             <g class="arm-left">
-              <path d="M130 218c-22 17-35 39-37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/>
-              <circle cx="92" cy="290" r="9" fill="url(#skin)"/>
+              <path d="M130 220c-22 17-35 39-37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/>
+              <circle cx="92" cy="292" r="9" fill="url(#skin)"/>
             </g>
+
             <g class="arm-right">
-              <path d="M230 218c22 17 35 39 37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/>
-              <circle cx="268" cy="290" r="9" fill="url(#skin)"/>
+              <path d="M230 220c22 17 35 39 37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/>
+              <circle cx="268" cy="292" r="9" fill="url(#skin)"/>
             </g>
+
             <path d="M151 313l-6 28h28l3-28zm58 0 6 28h-28l-3-28z" fill="#153b7c"/>
           </g>
 
           <g class="head">
             <path d="M114 127c4-50 30-84 71-82 41 2 66 34 62 82-2 28-17 54-39 68-16 10-41 10-57 0-22-14-35-40-37-68z" fill="url(#skin)"/>
+
             <path d="M119 111c8-45 38-72 76-67 32 4 55 27 58 62-20-16-48-24-86-22-20 1-35 9-48 27z" fill="url(#hair)"/>
             <path d="M116 118c-8 22-5 48 5 69-25-20-28-63-5-87z" fill="url(#hair)" opacity=".95"/>
-            <circle cx="158" cy="133" r="7" fill="#1d1d1f"/>
-            <circle cx="204" cy="133" r="7" fill="#1d1d1f"/>
-            <circle cx="155" cy="130" r="2" fill="white"/>
-            <circle cx="201" cy="130" r="2" fill="white"/>
+
+            <ellipse cx="150" cy="154" rx="17" ry="12" fill="url(#cheek)"/>
+            <ellipse cx="213" cy="154" rx="17" ry="12" fill="url(#cheek)"/>
+
+            <g class="eye">
+              <circle cx="158" cy="133" r="7" fill="#1d1d1f"/>
+              <circle cx="155" cy="130" r="2" fill="white"/>
+            </g>
+
+            <g class="eye">
+              <circle cx="204" cy="133" r="7" fill="#1d1d1f"/>
+              <circle cx="201" cy="130" r="2" fill="white"/>
+            </g>
+
             <path d="M147 119c12-7 22-7 31-1M192 118c10-6 21-5 31 2" stroke="#2a160d" stroke-width="5" stroke-linecap="round" fill="none"/>
             <path d="M181 139c-3 8-5 15-1 21" stroke="#c7794b" stroke-width="4" stroke-linecap="round" fill="none"/>
-            <ellipse class="mouth" cx="181" cy="174" rx="18" ry="6" fill="#7b1d1d"/>
+
+            <ellipse class="mouth" cx="181" cy="174" rx="18" ry="7" fill="#7b1d1d"/>
             <path d="M162 178c10 10 29 10 39 0" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".9"/>
           </g>
         </svg>
@@ -599,6 +683,9 @@
     let adminMode = false;
     let adminPin = '';
     let pendingAdminTranscript = '';
+    let audioContext = null;
+    let analyser = null;
+    let analyserRunning = false;
 
     function setStatus(text, mode = '') {
       statusText.textContent = text;
@@ -639,7 +726,10 @@
       clearTimeout(stopSpeakingTimer);
       stopSpeakingTimer = setTimeout(() => {
         root.classList.remove('speaking');
-      }, 1500);
+        document.documentElement.style.setProperty('--mouth-scale', '.35');
+        document.documentElement.style.setProperty('--voice-lift', '0px');
+        document.documentElement.style.setProperty('--voice-glow', '.12');
+      }, 1200);
     }
 
     function setAdmin(on) {
@@ -668,6 +758,7 @@
     async function fetchWithTimeout(url, options = {}, ms = 25000) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), ms);
+
       try {
         return await fetch(url, { ...options, signal: controller.signal });
       } finally {
@@ -687,6 +778,7 @@
       try {
         const res = await fetch('/app-config.json?v=' + Date.now());
         if (!res.ok) return;
+
         const config = await res.json();
 
         if (config.avatarScale) {
@@ -694,6 +786,60 @@
         }
 
         document.body.classList.toggle('dark', config.theme === 'dark');
+      } catch (_) {}
+    }
+
+    function startAudioAnalyser(stream) {
+      if (analyserRunning) return;
+
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+
+        audioContext = audioContext || new AudioContextClass();
+
+        if (audioContext.state === 'suspended') {
+          audioContext.resume().catch(() => {});
+        }
+
+        const source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.68;
+        source.connect(analyser);
+
+        const data = new Uint8Array(analyser.fftSize);
+        analyserRunning = true;
+
+        function loop() {
+          if (!analyserRunning || !analyser) return;
+
+          analyser.getByteTimeDomainData(data);
+
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) {
+            const value = (data[i] - 128) / 128;
+            sum += value * value;
+          }
+
+          const rms = Math.sqrt(sum / data.length);
+          const energy = Math.min(1, Math.max(0, (rms - 0.015) * 8));
+          const mouth = Math.max(.35, 0.35 + energy * 2.25);
+          const lift = -energy * 8;
+          const glow = 0.12 + energy * 0.24;
+
+          document.documentElement.style.setProperty('--mouth-scale', mouth.toFixed(2));
+          document.documentElement.style.setProperty('--voice-lift', `${lift.toFixed(1)}px`);
+          document.documentElement.style.setProperty('--voice-glow', glow.toFixed(2));
+
+          if (energy > 0.08) {
+            root.classList.add('speaking');
+          }
+
+          requestAnimationFrame(loop);
+        }
+
+        loop();
       } catch (_) {}
     }
 
@@ -719,6 +865,7 @@
         });
 
         setStatus('Token...');
+
         const tokenResp = await fetchWithTimeout('/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -730,16 +877,19 @@
 
         const tokenText = await tokenResp.text();
         let tokenData = {};
+
         try {
           tokenData = JSON.parse(tokenText);
         } catch (_) {}
 
         const key = tokenData?.value || tokenData?.client_secret?.value;
+
         if (!tokenResp.ok || !key) {
           throw new Error('/session Fehler ' + tokenResp.status + ': ' + tokenText);
         }
 
         setStatus('Audio...');
+
         remoteAudio = remoteAudio || document.createElement('audio');
         remoteAudio.autoplay = true;
         remoteAudio.playsInline = true;
@@ -749,8 +899,10 @@
         pc = new RTCPeerConnection();
 
         pc.ontrack = (event) => {
-          remoteAudio.srcObject = event.streams[0];
+          const remoteStream = event.streams[0];
+          remoteAudio.srcObject = remoteStream;
           remoteAudio.play().catch(() => {});
+          startAudioAnalyser(remoteStream);
         };
 
         pc.onconnectionstatechange = () => {
@@ -802,11 +954,16 @@
         }, 30000);
 
         const answer = await sdpResp.text();
+
         if (!sdpResp.ok) {
           throw new Error('SDP Fehler ' + sdpResp.status + ': ' + answer);
         }
 
-        await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+        await pc.setRemoteDescription({
+          type: 'answer',
+          sdp: answer
+        });
+
         connecting = false;
       } catch (error) {
         fail(
@@ -827,6 +984,9 @@
 
       dc = null;
       pc = null;
+      analyserRunning = false;
+      analyser = null;
+
       root.classList.remove('speaking');
 
       if (show) startModal.classList.add('show');
@@ -834,6 +994,7 @@
 
     function handleRealtime(raw) {
       let msg;
+
       try {
         msg = JSON.parse(raw);
       } catch (_) {
@@ -843,18 +1004,36 @@
       const type = msg.type || '';
 
       if (type.startsWith('response.')) speak();
-      if (type === 'response.audio.delta' || type === 'response.audio_transcript.delta' || type === 'response.created') speak();
 
-      if ((type === 'response.audio_transcript.delta' || type === 'response.output_text.delta') && msg.delta) {
+      if (
+        type === 'response.audio.delta' ||
+        type === 'response.audio_transcript.delta' ||
+        type === 'response.created'
+      ) {
+        speak();
+      }
+
+      if (
+        (type === 'response.audio_transcript.delta' ||
+         type === 'response.output_text.delta') &&
+        msg.delta
+      ) {
         aiDelta(msg.delta);
       }
 
-      if (type === 'response.audio_transcript.done' || type === 'response.done' || type === 'response.output_text.done') {
+      if (
+        type === 'response.audio_transcript.done' ||
+        type === 'response.done' ||
+        type === 'response.output_text.done'
+      ) {
         currentAiBubble = null;
         stopSoon();
       }
 
-      if (type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
+      if (
+        type === 'conversation.item.input_audio_transcription.completed' &&
+        msg.transcript
+      ) {
         handleUserTranscript(msg.transcript);
       }
 
@@ -913,7 +1092,10 @@
         const res = await fetch('/admin/apply-config-change', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adminPin: pin, command: '' })
+          body: JSON.stringify({
+            adminPin: pin,
+            command: ''
+          })
         });
 
         if (res.status === 401) {
@@ -977,6 +1159,7 @@
         event.preventDefault();
         event.stopPropagation();
       }
+
       connect();
     }
 
@@ -1020,7 +1203,12 @@
 
     loadConfig();
     setStatus('Verbinde...');
-    setTimeout(() => connect().catch(() => {}), 350);
+
+    setTimeout(() => {
+      connect().catch(() => {
+        startModal.classList.add('show');
+      });
+    }, 350);
   </script>
 </body>
 </html>
