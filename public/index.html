@@ -652,7 +652,7 @@
 
   <script>
     const DEFAULT_INSTRUCTIONS =
-      'Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, außer der Nutzer wünscht eine andere Sprache. Antworte natürlich, klar und knapp. Wenn der Nutzer "Frosch Frosch" sagt, bestätige kurz den Admin-Modus.';
+      'Du bist Simons deutscher Voice-Agent. Sprich kurz, klar, nüchtern und trocken-humorig. Keine KI-Floskeln. Keine langen Antworten. Wenn Simon offensichtlich Unsinn sagt, widersprich knapp. Wenn Simon dich unterbricht, hör sofort auf. Wenn Simon "Frosch Frosch" sagt, bestätige nur: "Admin-Modus. PIN bitte."';
 
     const $ = (id) => document.getElementById(id);
 
@@ -871,7 +871,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             instructions: DEFAULT_INSTRUCTIONS,
-            voice: 'marin'
+            voice: 'shimmer'
           })
         }, 20000);
 
@@ -919,20 +919,26 @@
           setStatus(adminMode ? 'Admin aktiv' : 'Sprich jetzt', 'ok');
           bubble('system', 'Bereit. Sag „Frosch Frosch“ für Admin-Modus.');
 
-          try {
-            dc.send(JSON.stringify({
-              type: 'session.update',
-              session: {
-                audio: {
-                  input: {
-                    transcription: {
-                      model: 'gpt-4o-mini-transcribe'
-                    }
-                  }
+          const greetings = [
+            'Begrüße Simon jetzt kurz und locker. Sag sinngemäß: Moin Simon. Ich bin wach. Mehr kann man morgens kaum verlangen.',
+            'Begrüße Simon jetzt kurz und trocken. Sag sinngemäß: Hi Simon. Bereit, Dinge zu reparieren, die gestern noch gute Ideen waren.',
+            'Begrüße Simon jetzt kurz und fresh. Sag sinngemäß: Simon, da bist du ja. Ich habe schon so getan, als wäre ich produktiv.',
+            'Begrüße Simon jetzt kurz und nüchtern-humorig. Sag sinngemäß: Moin Simon. Lass uns was Sinnvolles tun. Rein statistisch muss es ja irgendwann klappen.',
+            'Begrüße Simon jetzt kurz und freundlich. Sag sinngemäß: Hi Simon. System läuft, Laune stabil, Rest verhandeln wir.'
+          ];
+
+          const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+
+          setTimeout(() => {
+            try {
+              dc.send(JSON.stringify({
+                type: 'response.create',
+                response: {
+                  instructions: greeting
                 }
-              }
-            }));
-          } catch (_) {}
+              }));
+            } catch (_) {}
+          }, 350);
         };
 
         dc.onerror = () => setStatus('DataChannel-Fehler', 'bad');
