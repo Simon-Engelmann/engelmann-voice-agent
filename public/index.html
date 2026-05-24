@@ -1,451 +1,106 @@
 <!doctype html>
 <html lang="de">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Engelmann Voice Agent</title>
-    <style>
-      :root {
-        --bg: #fbfbfd;
-        --text: #1d1d1f;
-        --muted: #6e6e73;
-        --line: rgba(0,0,0,.08);
-        --card: rgba(255,255,255,.84);
-        --blue: #007aff;
-        --green: #34c759;
-        --red: #ff3b30;
-      }
-      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-      html, body { margin: 0; min-height: 100%; overflow: hidden; }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
-        background: radial-gradient(circle at 50% 45%, #f0f6ff 0, #fff 38%, var(--bg) 100%);
-        color: var(--text);
-      }
-      .app {
-        min-height: 100dvh;
-        padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
-        display: grid;
-        place-items: center;
-        position: relative;
-      }
-      .status-pill {
-        position: fixed;
-        top: max(14px, env(safe-area-inset-top));
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 20;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        min-height: 34px;
-        max-width: calc(100vw - 32px);
-        padding: 7px 13px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: rgba(255,255,255,.78);
-        backdrop-filter: blur(18px);
-        box-shadow: 0 8px 24px rgba(0,0,0,.05);
-        color: var(--muted);
-        font-size: 13px;
-        white-space: nowrap;
-      }
-      .dot { width: 8px; height: 8px; border-radius: 50%; background: #c7c7cc; }
-      .connected .dot { background: var(--green); box-shadow: 0 0 0 6px rgba(52,199,89,.12); }
-      .error .dot { background: var(--red); box-shadow: 0 0 0 6px rgba(255,59,48,.12); }
-      .avatar-wrap { width: min(72vw, 360px); height: min(72vw, 360px); display: grid; place-items: center; }
-      .avatar {
-        width: 100%;
-        height: 100%;
-        filter: drop-shadow(0 35px 38px rgba(37,70,120,.15));
-        animation: idleFloat 4.8s ease-in-out infinite;
-        transform-origin: 50% 85%;
-      }
-      .avatar .head { animation: idleHead 5.8s ease-in-out infinite; transform-origin: 50% 42%; }
-      .avatar .body { animation: breathe 3.2s ease-in-out infinite; transform-origin: 50% 68%; }
-      .avatar .mouth { transform-origin: 50% 50%; transition: transform .08s ease, opacity .08s ease; }
-      .avatar .arm-left { animation: idleArmLeft 4s ease-in-out infinite; transform-origin: 48% 58%; }
-      .avatar .arm-right { animation: idleArmRight 4.4s ease-in-out infinite; transform-origin: 52% 58%; }
-      .speaking .avatar { animation: speakBody .58s ease-in-out infinite alternate; }
-      .speaking .avatar .head { animation: speakHead .42s ease-in-out infinite alternate; }
-      .speaking .avatar .mouth { animation: mouth .16s ease-in-out infinite alternate; }
-      .speaking .avatar .arm-left { animation: talkArmLeft .82s ease-in-out infinite alternate; }
-      .speaking .avatar .arm-right { animation: talkArmRight .78s ease-in-out infinite alternate; }
-      @keyframes idleFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
-      @keyframes idleHead { 0%,100%{transform:rotate(-1deg)} 50%{transform:rotate(1.2deg)} }
-      @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.018)} }
-      @keyframes idleArmLeft { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(2deg)} }
-      @keyframes idleArmRight { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(-2deg)} }
-      @keyframes speakBody { from{transform:translateY(0) scale(1)} to{transform:translateY(-6px) scale(1.025)} }
-      @keyframes speakHead { from{transform:rotate(-2deg) translateY(0)} to{transform:rotate(2deg) translateY(-3px)} }
-      @keyframes mouth { from{transform:scaleY(.45);opacity:.7} to{transform:scaleY(1.8);opacity:1} }
-      @keyframes talkArmLeft { from{transform:rotate(-4deg)} to{transform:rotate(8deg)} }
-      @keyframes talkArmRight { from{transform:rotate(4deg)} to{transform:rotate(-8deg)} }
-      .swipe-hint {
-        position: fixed;
-        bottom: max(18px, env(safe-area-inset-bottom));
-        left: 50%;
-        transform: translateX(-50%);
-        color: #b0b0b7;
-        font-size: 12px;
-        text-align: center;
-      }
-      .hint-bar { width: 42px; height: 5px; background: #d1d1d6; border-radius: 4px; margin: 0 auto 8px; }
-      .modal {
-        position: fixed;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        padding: 22px;
-        z-index: 50;
-        background: rgba(251,251,253,.58);
-        backdrop-filter: blur(8px);
-      }
-      .modal.hidden { display: none; }
-      .modal-card {
-        width: min(420px, 100%);
-        padding: 26px;
-        border-radius: 28px;
-        background: rgba(255,255,255,.92);
-        box-shadow: 0 24px 70px rgba(0,0,0,.14);
-        border: 1px solid var(--line);
-        text-align: center;
-      }
-      h1 { margin: 0 0 8px; font-size: 24px; }
-      p { margin: 0 0 18px; color: var(--muted); line-height: 1.38; }
-      button, input {
-        width: 100%;
-        min-height: 48px;
-        border: 0;
-        border-radius: 16px;
-        padding: 12px 14px;
-        font: inherit;
-      }
-      button { background: var(--blue); color: white; font-weight: 700; cursor: pointer; }
-      button:disabled { opacity: .55; cursor: default; }
-      input { background: #f5f5f7; border: 1px solid var(--line); color: var(--text); }
-      .chat-sheet {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        height: min(78dvh, 760px);
-        z-index: 30;
-        transform: translateY(calc(100% - 56px));
-        transition: transform .26s ease;
-        border-radius: 30px 30px 0 0;
-        background: rgba(255,255,255,.95);
-        backdrop-filter: blur(24px);
-        border: 1px solid var(--line);
-        box-shadow: 0 -28px 70px rgba(0,0,0,.12);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      .chat-sheet.open { transform: translateY(0); }
-      @media (min-width: 760px) { .chat-sheet { left: 50%; right: auto; width: 720px; transform: translate(-50%, calc(100% - 56px)); } .chat-sheet.open { transform: translate(-50%, 0); } }
-      .handle-wrap { padding: 10px 18px 6px; text-align: center; }
-      .handle { width: 48px; height: 5px; border-radius: 6px; background: #d1d1d6; margin: 0 auto 8px; }
-      .chat-title { font-weight: 700; font-size: 15px; }
-      .chat-log { flex: 1; overflow: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 9px; }
-      .bubble { max-width: 88%; padding: 11px 13px; border-radius: 18px; line-height: 1.35; font-size: 15px; white-space: pre-wrap; }
-      .me { align-self: flex-end; background: var(--blue); color: white; border-bottom-right-radius: 6px; }
-      .ai { align-self: flex-start; background: #f1f1f4; color: var(--text); border-bottom-left-radius: 6px; }
-      .system { align-self: center; max-width: 94%; background: #fff8dc; color: #6b5b00; font-size: 13px; }
-      .chat-controls { padding: 10px 14px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); display: grid; gap: 8px; }
-      .control-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
-      .control-row button { width: auto; padding-inline: 16px; }
-      .secondary { background: #1d1d1f; }
-      .ghost { background: #f2f2f7; color: var(--text); }
-      .file-input { font-size: 14px; }
-      a { color: inherit; }
-    </style>
-  </head>
-  <body>
-    <div id="root" class="app">
-      <div id="statusPill" class="status-pill"><span class="dot"></span><span id="status">Bereit</span></div>
-      <div id="avatarStage" class="avatar-wrap" aria-label="Avatar">
-        <svg class="avatar" viewBox="0 0 360 360" role="img" aria-label="Cartoon Avatar">
-          <defs>
-            <radialGradient id="skin" cx="42%" cy="24%" r="70%"><stop offset="0" stop-color="#ffe0bf"/><stop offset="1" stop-color="#f3a56f"/></radialGradient>
-            <linearGradient id="shirt" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#2f7bff"/><stop offset="1" stop-color="#0b2d68"/></linearGradient>
-            <linearGradient id="hair" x1="0" x2="1"><stop offset="0" stop-color="#7a3a12"/><stop offset="1" stop-color="#23130b"/></linearGradient>
-          </defs>
-          <ellipse cx="180" cy="326" rx="76" ry="14" fill="#dce7f7" opacity=".75"/>
-          <g class="body">
-            <path d="M128 208c10-31 32-49 52-49s42 18 52 49l21 88c2 9-4 17-13 17H120c-9 0-15-8-13-17l21-88z" fill="url(#shirt)"/>
-            <path d="M151 168c13 14 45 14 58 0l-7 32h-44l-7-32z" fill="url(#skin)"/>
-            <path d="M151 209h58" stroke="#ffffff" stroke-width="4" opacity=".75"/>
-            <g class="arm-left"><path d="M130 218c-22 17-35 39-37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/><circle cx="92" cy="290" r="9" fill="url(#skin)"/></g>
-            <g class="arm-right"><path d="M230 218c22 17 35 39 37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/><circle cx="268" cy="290" r="9" fill="url(#skin)"/></g>
-            <path d="M151 313l-6 28h28l3-28zm58 0 6 28h-28l-3-28z" fill="#153b7c"/>
-          </g>
-          <g class="head">
-            <path d="M114 127c4-50 30-84 71-82 41 2 66 34 62 82-2 28-17 54-39 68-16 10-41 10-57 0-22-14-35-40-37-68z" fill="url(#skin)"/>
-            <path d="M119 111c8-45 38-72 76-67 32 4 55 27 58 62-20-16-48-24-86-22-20 1-35 9-48 27z" fill="url(#hair)"/>
-            <path d="M116 118c-8 22-5 48 5 69-25-20-28-63-5-87z" fill="url(#hair)" opacity=".95"/>
-            <circle cx="158" cy="133" r="7" fill="#1d1d1f"/><circle cx="204" cy="133" r="7" fill="#1d1d1f"/>
-            <circle cx="155" cy="130" r="2" fill="white"/><circle cx="201" cy="130" r="2" fill="white"/>
-            <path d="M147 119c12-7 22-7 31-1M192 118c10-6 21-5 31 2" stroke="#2a160d" stroke-width="5" stroke-linecap="round" fill="none"/>
-            <path d="M181 139c-3 8-5 15-1 21" stroke="#c7794b" stroke-width="4" stroke-linecap="round" fill="none"/>
-            <ellipse class="mouth" cx="181" cy="174" rx="18" ry="6" fill="#7b1d1d"/>
-            <path d="M162 178c10 10 29 10 39 0" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".9"/>
-          </g>
-        </svg>
-      </div>
-      <div class="swipe-hint"><div class="hint-bar"></div>Nach oben wischen für Verlauf und Admin</div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Engelmann Voice Agent</title>
+  <style>
+    :root{--bg:#fbfbfd;--text:#1d1d1f;--muted:#6e6e73;--line:rgba(0,0,0,.09);--blue:#007aff;--green:#34c759;--red:#ff3b30}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent} html,body{margin:0;min-height:100%;overflow:hidden}
+    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;background:radial-gradient(circle at 50% 44%,#f0f6ff 0,#fff 38%,var(--bg) 100%);color:var(--text)}
+    .app{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));position:relative}
+    .status{position:fixed;top:max(14px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 28px);min-height:34px;padding:7px 13px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.82);backdrop-filter:blur(18px);box-shadow:0 8px 24px rgba(0,0,0,.05);font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .dot{width:8px;height:8px;border-radius:99px;background:#c7c7cc;flex:0 0 auto}.ok .dot{background:var(--green);box-shadow:0 0 0 6px rgba(52,199,89,.12)}.bad .dot{background:var(--red);box-shadow:0 0 0 6px rgba(255,59,48,.12)}
+    .avatar-box{width:min(72vw,360px);height:min(72vw,360px);display:grid;place-items:center;filter:drop-shadow(0 35px 38px rgba(37,70,120,.15));animation:float 4.8s ease-in-out infinite}.speaking .avatar-box{animation:speakBody .58s ease-in-out infinite alternate}
+    svg{width:100%;height:100%}.head{animation:head 5.8s ease-in-out infinite;transform-origin:50% 42%}.body{animation:breathe 3.2s ease-in-out infinite;transform-origin:50% 68%}.mouth{transform-origin:50% 50%;transition:.1s}.speaking .mouth{animation:mouth .16s ease-in-out infinite alternate}.speaking .head{animation:speakHead .42s ease-in-out infinite alternate}.arm-left{animation:armL 4s ease-in-out infinite;transform-origin:48% 58%}.arm-right{animation:armR 4.4s ease-in-out infinite;transform-origin:52% 58%}.speaking .arm-left{animation:talkL .82s ease-in-out infinite alternate}.speaking .arm-right{animation:talkR .78s ease-in-out infinite alternate}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.018)}}@keyframes head{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(1.2deg)}}@keyframes speakBody{from{transform:translateY(0) scale(1)}to{transform:translateY(-6px) scale(1.025)}}@keyframes speakHead{from{transform:rotate(-2deg) translateY(0)}to{transform:rotate(2deg) translateY(-3px)}}@keyframes mouth{from{transform:scaleY(.45);opacity:.7}to{transform:scaleY(1.8);opacity:1}}@keyframes armL{0%,100%{transform:rotate(0)}50%{transform:rotate(2deg)}}@keyframes armR{0%,100%{transform:rotate(0)}50%{transform:rotate(-2deg)}}@keyframes talkL{from{transform:rotate(-4deg)}to{transform:rotate(8deg)}}@keyframes talkR{from{transform:rotate(4deg)}to{transform:rotate(-8deg)}}
+    .hint{position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);color:#b0b0b7;font-size:12px;text-align:center}.hint:before{content:"";display:block;width:42px;height:5px;background:#d1d1d6;border-radius:4px;margin:0 auto 8px}
+    .modal{position:fixed;inset:0;display:grid;place-items:center;padding:22px;z-index:50;background:rgba(251,251,253,.62);backdrop-filter:blur(8px)}.modal.hidden{display:none}.card{width:min(430px,100%);padding:26px;border-radius:28px;background:rgba(255,255,255,.94);box-shadow:0 24px 70px rgba(0,0,0,.14);border:1px solid var(--line);text-align:center}.card h1{margin:0 0 8px;font-size:24px}.card p{margin:0 0 14px;color:var(--muted);line-height:1.38}.modal-error{display:none;margin:12px 0 0;padding:10px;border-radius:14px;background:#fff1f0;color:#9f1c15;font-size:13px;text-align:left;white-space:pre-wrap}.modal-error.show{display:block}
+    button,input{width:100%;min-height:48px;border:0;border-radius:16px;padding:12px 14px;font:inherit}button{background:var(--blue);color:#fff;font-weight:700;cursor:pointer;touch-action:manipulation}button:disabled{opacity:.62;cursor:default}input{background:#f5f5f7;border:1px solid var(--line);color:var(--text)}
+    .sheet{position:fixed;left:0;right:0;bottom:0;height:min(78dvh,760px);z-index:30;transform:translateY(calc(100% - 56px));transition:transform .26s ease;border-radius:30px 30px 0 0;background:rgba(255,255,255,.95);backdrop-filter:blur(24px);border:1px solid var(--line);box-shadow:0 -28px 70px rgba(0,0,0,.12);display:flex;flex-direction:column;overflow:hidden}.sheet.open{transform:translateY(0)}@media(min-width:760px){.sheet{left:50%;right:auto;width:720px;transform:translate(-50%,calc(100% - 56px))}.sheet.open{transform:translate(-50%,0)}}
+    .handle-wrap{padding:10px 18px 6px;text-align:center}.handle{width:48px;height:5px;border-radius:6px;background:#d1d1d6;margin:0 auto 8px}.chat-title{font-weight:700;font-size:15px}.log{flex:1;overflow:auto;padding:10px 14px;display:flex;flex-direction:column;gap:9px}.bubble{max-width:88%;padding:11px 13px;border-radius:18px;line-height:1.35;font-size:15px;white-space:pre-wrap}.me{align-self:flex-end;background:var(--blue);color:white;border-bottom-right-radius:6px}.ai{align-self:flex-start;background:#f1f1f4;color:var(--text);border-bottom-left-radius:6px}.system{align-self:center;max-width:94%;background:#fff8dc;color:#6b5b00;font-size:13px}
+    .controls{padding:10px 14px max(14px,env(safe-area-inset-bottom));border-top:1px solid var(--line);display:grid;gap:8px}.row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}.row button{width:auto;padding-inline:16px}.secondary{background:#1d1d1f}.ghost{background:#f2f2f7;color:var(--text)}
+  </style>
+</head>
+<body>
+  <div id="root" class="app">
+    <div id="statusPill" class="status"><span class="dot"></span><span id="statusText">Bereit</span></div>
+    <div class="avatar-box" aria-label="Avatar">
+      <svg viewBox="0 0 360 360" role="img" aria-label="Cartoon Avatar">
+        <defs><radialGradient id="skin" cx="42%" cy="24%" r="70%"><stop offset="0" stop-color="#ffe0bf"/><stop offset="1" stop-color="#f3a56f"/></radialGradient><linearGradient id="shirt" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#2f7bff"/><stop offset="1" stop-color="#0b2d68"/></linearGradient><linearGradient id="hair" x1="0" x2="1"><stop offset="0" stop-color="#7a3a12"/><stop offset="1" stop-color="#23130b"/></linearGradient></defs>
+        <ellipse cx="180" cy="326" rx="76" ry="14" fill="#dce7f7" opacity=".75"/>
+        <g class="body"><path d="M128 208c10-31 32-49 52-49s42 18 52 49l21 88c2 9-4 17-13 17H120c-9 0-15-8-13-17l21-88z" fill="url(#shirt)"/><path d="M151 168c13 14 45 14 58 0l-7 32h-44l-7-32z" fill="url(#skin)"/><path d="M151 209h58" stroke="#fff" stroke-width="4" opacity=".75"/><g class="arm-left"><path d="M130 218c-22 17-35 39-37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/><circle cx="92" cy="290" r="9" fill="url(#skin)"/></g><g class="arm-right"><path d="M230 218c22 17 35 39 37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/><circle cx="268" cy="290" r="9" fill="url(#skin)"/></g><path d="M151 313l-6 28h28l3-28zm58 0 6 28h-28l-3-28z" fill="#153b7c"/></g>
+        <g class="head"><path d="M114 127c4-50 30-84 71-82 41 2 66 34 62 82-2 28-17 54-39 68-16 10-41 10-57 0-22-14-35-40-37-68z" fill="url(#skin)"/><path d="M119 111c8-45 38-72 76-67 32 4 55 27 58 62-20-16-48-24-86-22-20 1-35 9-48 27z" fill="url(#hair)"/><path d="M116 118c-8 22-5 48 5 69-25-20-28-63-5-87z" fill="url(#hair)" opacity=".95"/><circle cx="158" cy="133" r="7" fill="#1d1d1f"/><circle cx="204" cy="133" r="7" fill="#1d1d1f"/><circle cx="155" cy="130" r="2" fill="white"/><circle cx="201" cy="130" r="2" fill="white"/><path d="M147 119c12-7 22-7 31-1M192 118c10-6 21-5 31 2" stroke="#2a160d" stroke-width="5" stroke-linecap="round" fill="none"/><path d="M181 139c-3 8-5 15-1 21" stroke="#c7794b" stroke-width="4" stroke-linecap="round" fill="none"/><ellipse class="mouth" cx="181" cy="174" rx="18" ry="6" fill="#7b1d1d"/><path d="M162 178c10 10 29 10 39 0" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".9"/></g>
+      </svg>
     </div>
+    <div class="hint">Nach oben wischen für Verlauf und Admin</div>
+  </div>
 
-    <div id="startModal" class="modal">
-      <div class="modal-card">
-        <h1>Sprachmodus starten</h1>
-        <p>Einmal tippen, dann kannst du mit dem Agenten sprechen.</p>
-        <button id="startBtn">Jetzt starten</button>
-      </div>
+  <div id="startModal" class="modal">
+    <div class="card">
+      <h1>Sprachmodus starten</h1>
+      <p id="modalText">Einmal tippen, dann kannst du mit dem Agenten sprechen.</p>
+      <button id="startBtn" type="button">Jetzt starten</button>
+      <div id="modalError" class="modal-error"></div>
     </div>
+  </div>
 
-    <section id="chatSheet" class="chat-sheet">
-      <div id="chatHandle" class="handle-wrap"><div class="handle"></div><div class="chat-title">Verlauf & Admin</div></div>
-      <div id="chatLog" class="chat-log"></div>
-      <div class="chat-controls">
-        <div class="control-row">
-          <input id="textInput" placeholder="Nachricht oder Änderungswunsch" autocomplete="off" />
-          <button id="sendBtn">Senden</button>
-        </div>
-        <div class="control-row">
-          <input id="adminPin" placeholder="Admin-PIN" type="password" inputmode="numeric" autocomplete="off" />
-          <button id="changeBtn" class="secondary">Änderung</button>
-        </div>
-        <div class="control-row">
-          <input id="fileInput" class="file-input" type="file" />
-          <button id="uploadBtn" class="ghost">Upload</button>
-        </div>
-      </div>
-    </section>
+  <section id="chatSheet" class="sheet">
+    <div id="chatHandle" class="handle-wrap"><div class="handle"></div><div class="chat-title">Verlauf & Admin</div></div>
+    <div id="chatLog" class="log"></div>
+    <div class="controls">
+      <div class="row"><input id="textInput" placeholder="Nachricht oder Änderungswunsch" autocomplete="off"/><button id="sendBtn" type="button">Senden</button></div>
+      <div class="row"><input id="adminPin" placeholder="Admin-PIN" type="password" inputmode="numeric" autocomplete="off"/><button id="changeBtn" class="secondary" type="button">Änderung</button></div>
+      <div class="row"><input id="fileInput" type="file"/><button id="uploadBtn" class="ghost" type="button">Upload</button></div>
+    </div>
+  </section>
 
-    <script>
-      const DEFAULT_INSTRUCTIONS = 'Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, ausser der Nutzer wuenscht eine andere Sprache. Antworte natuerlich, klar und knapp.';
-      const root = document.getElementById('root');
-      const statusPill = document.getElementById('statusPill');
-      const statusEl = document.getElementById('status');
-      const avatarStage = document.getElementById('avatarStage');
-      const startModal = document.getElementById('startModal');
-      const startBtn = document.getElementById('startBtn');
-      const chatSheet = document.getElementById('chatSheet');
-      const chatHandle = document.getElementById('chatHandle');
-      const chatLog = document.getElementById('chatLog');
-      const textInput = document.getElementById('textInput');
-      const sendBtn = document.getElementById('sendBtn');
-      const adminPin = document.getElementById('adminPin');
-      const changeBtn = document.getElementById('changeBtn');
-      const fileInput = document.getElementById('fileInput');
-      const uploadBtn = document.getElementById('uploadBtn');
-
-      let pc = null;
-      let dc = null;
-      let remoteAudio = null;
-      let dragStartY = 0;
-      let lastUserTranscript = '';
-      let currentAiBubble = null;
-      let stopSpeakingTimer = null;
-
-      adminPin.value = localStorage.getItem('adminPin') || '';
-      adminPin.addEventListener('input', () => localStorage.setItem('adminPin', adminPin.value));
-
-      function setStatus(text, mode = '') {
-        statusEl.textContent = text;
-        statusPill.classList.toggle('connected', mode === 'connected');
-        statusPill.classList.toggle('error', mode === 'error');
-      }
-
-      function openChat(open) { chatSheet.classList.toggle('open', open); }
-
-      function appendBubble(role, text) {
-        const el = document.createElement('div');
-        el.className = `bubble ${role}`;
-        el.textContent = text;
-        chatLog.appendChild(el);
-        chatLog.scrollTop = chatLog.scrollHeight;
-        return el;
-      }
-
-      function appendAiDelta(text) {
-        if (!currentAiBubble) currentAiBubble = appendBubble('ai', '');
-        currentAiBubble.textContent += text;
-        chatLog.scrollTop = chatLog.scrollHeight;
-      }
-
-      function startSpeaking() {
-        clearTimeout(stopSpeakingTimer);
-        avatarStage.classList.add('speaking');
-      }
-
-      function stopSpeakingSoon() {
-        clearTimeout(stopSpeakingTimer);
-        stopSpeakingTimer = setTimeout(() => avatarStage.classList.remove('speaking'), 1500);
-      }
-
-      function shouldCreateChangeRequest(text) {
-        const t = String(text || '').toLowerCase();
-        return t.includes('änderung erstellen') || t.includes('aenderung erstellen') || t.includes('änderungswunsch') || t.includes('app ändern') || t.includes('app aendern') || t.includes('admin-modus') || t.includes('admin modus');
-      }
-
-      function cleanChangeText(text) {
-        return String(text || '')
-          .replace(/admin[- ]modus/ig, '')
-          .replace(/änderung erstellen:?/ig, '')
-          .replace(/aenderung erstellen:?/ig, '')
-          .trim();
-      }
-
-      async function createChangeRequest(sourceText) {
-        const transcript = cleanChangeText(sourceText || textInput.value || lastUserTranscript);
-        if (!transcript) { appendBubble('system', 'Kein Änderungswunsch erkannt.'); return; }
-        if (!adminPin.value.trim()) { openChat(true); appendBubble('system', 'Bitte Admin-PIN eintragen.'); return; }
-
-        changeBtn.disabled = true;
-        appendBubble('system', 'Erstelle GitHub-Änderung...');
-        try {
-          const res = await fetch('/change-request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adminPin: adminPin.value.trim(), transcript, summary: transcript.slice(0, 180) })
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data.error || JSON.stringify(data));
-          appendBubble('ai', `Änderung erstellt: ${data.issueUrl}`);
-          textInput.value = '';
-        } catch (error) {
-          appendBubble('system', `Änderung fehlgeschlagen: ${error.message}`);
-        } finally {
-          changeBtn.disabled = false;
-        }
-      }
-
-      async function connect() {
-        startBtn.disabled = true;
-        setStatus('Mikrofon wird gestartet...');
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          const sessionResp = await fetch('/session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ instructions: DEFAULT_INSTRUCTIONS, voice: 'alloy' })
-          });
-          const sessionText = await sessionResp.text();
-          let sessionData = {};
-          try { sessionData = JSON.parse(sessionText); } catch (_) {}
-          const ephemeralKey = sessionData?.client_secret?.value;
-          if (!sessionResp.ok || !ephemeralKey) throw new Error(`/session Fehler ${sessionResp.status}: ${sessionText}`);
-
-          remoteAudio = remoteAudio || document.createElement('audio');
-          remoteAudio.autoplay = true;
-          remoteAudio.playsInline = true;
-          document.body.appendChild(remoteAudio);
-
-          pc = new RTCPeerConnection();
-          pc.ontrack = (event) => { remoteAudio.srcObject = event.streams[0]; remoteAudio.play().catch(() => {}); };
-          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-          dc = pc.createDataChannel('oai-events');
-          dc.onopen = () => setStatus('Sprich jetzt', 'connected');
-          dc.onerror = () => setStatus('DataChannel-Fehler', 'error');
-          dc.onmessage = (event) => handleRealtimeEvent(event.data);
-
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          const sdpResp = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
-            method: 'POST',
-            body: offer.sdp,
-            headers: { Authorization: `Bearer ${ephemeralKey}`, 'Content-Type': 'application/sdp' }
-          });
-          const answer = await sdpResp.text();
-          if (!sdpResp.ok) throw new Error(`SDP Fehler ${sdpResp.status}: ${answer}`);
-          await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-          startModal.classList.add('hidden');
-          appendBubble('system', 'Sprachmodus aktiv. Für Änderungen sag: "Änderung erstellen: ..."');
-        } catch (error) {
-          setStatus(error.message, 'error');
-          appendBubble('system', error.message);
-          startModal.classList.remove('hidden');
-          startBtn.disabled = false;
-          disconnect(false);
-        }
-      }
-
-      function handleRealtimeEvent(raw) {
-        let msg;
-        try { msg = JSON.parse(raw); } catch (_) { return; }
-        const type = msg.type || '';
-        if (type.startsWith('response.')) startSpeaking();
-        if (type === 'response.audio.delta' || type === 'response.audio_transcript.delta' || type === 'response.created') startSpeaking();
-        if (type === 'response.audio_transcript.delta' && msg.delta) appendAiDelta(msg.delta);
-        if (type === 'response.output_text.delta' && msg.delta) appendAiDelta(msg.delta);
-        if (type === 'response.audio_transcript.done' || type === 'response.done' || type === 'response.output_text.done') {
-          currentAiBubble = null;
-          stopSpeakingSoon();
-        }
-        if (type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
-          lastUserTranscript = msg.transcript;
-          appendBubble('me', msg.transcript);
-          if (shouldCreateChangeRequest(msg.transcript)) createChangeRequest(msg.transcript);
-        }
-        if (type === 'error') appendBubble('system', msg.error?.message || JSON.stringify(msg));
-      }
-
-      function disconnect(showModal = true) {
-        if (dc) dc.close();
-        if (pc) pc.close();
-        dc = null;
-        pc = null;
-        avatarStage.classList.remove('speaking');
-        if (showModal) startModal.classList.remove('hidden');
-      }
-
-      function sendText() {
-        const text = textInput.value.trim();
-        if (!text) return;
-        lastUserTranscript = text;
-        appendBubble('me', text);
-        if (shouldCreateChangeRequest(text)) { createChangeRequest(text); return; }
-        if (!dc || dc.readyState !== 'open') { appendBubble('system', 'Voice-Verbindung ist noch nicht aktiv.'); return; }
-        dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } }));
-        dc.send(JSON.stringify({ type: 'response.create' }));
-        textInput.value = '';
-      }
-
-      async function uploadFile() {
-        const file = fileInput.files[0];
-        if (!file) return;
-        const formData = new FormData();
-        formData.append('file', file);
-        appendBubble('system', `Upload startet: ${file.name}`);
-        try {
-          const res = await fetch('/upload', { method: 'POST', body: formData });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Upload fehlgeschlagen');
-          appendBubble('me', `[Datei hochgeladen] ${data.file.name}`);
-        } catch (error) {
-          appendBubble('system', error.message);
-        }
-      }
-
-      startBtn.addEventListener('click', connect);
-      sendBtn.addEventListener('click', sendText);
-      changeBtn.addEventListener('click', () => createChangeRequest(textInput.value || lastUserTranscript));
-      uploadBtn.addEventListener('click', uploadFile);
-      textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendText(); });
-      chatHandle.addEventListener('click', () => openChat(!chatSheet.classList.contains('open')));
-      chatSheet.addEventListener('touchstart', (e) => { dragStartY = e.touches[0].clientY; }, { passive: true });
-      chatSheet.addEventListener('touchend', (e) => {
-        const delta = dragStartY - e.changedTouches[0].clientY;
-        if (delta > 30) openChat(true);
-        if (delta < -30) openChat(false);
-      }, { passive: true });
-      document.body.addEventListener('touchstart', (e) => { dragStartY = e.touches[0].clientY; }, { passive: true });
-      document.body.addEventListener('touchend', (e) => {
-        const delta = dragStartY - e.changedTouches[0].clientY;
-        if (delta > 55) openChat(true);
-      }, { passive: true });
-    </script>
-  </body>
+  <script>
+    const DEFAULT_INSTRUCTIONS='Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, ausser der Nutzer wuenscht eine andere Sprache. Antworte natuerlich, klar und knapp.';
+    const $=(id)=>document.getElementById(id);
+    const root=$('root'), statusPill=$('statusPill'), statusText=$('statusText'), startModal=$('startModal'), startBtn=$('startBtn'), modalText=$('modalText'), modalError=$('modalError'), chatSheet=$('chatSheet'), chatHandle=$('chatHandle'), chatLog=$('chatLog'), textInput=$('textInput'), sendBtn=$('sendBtn'), adminPin=$('adminPin'), changeBtn=$('changeBtn'), fileInput=$('fileInput'), uploadBtn=$('uploadBtn');
+    let pc=null,dc=null,remoteAudio=null,dragStartY=0,lastUserTranscript='',currentAiBubble=null,stopSpeakingTimer=null,connecting=false;
+    adminPin.value=localStorage.getItem('adminPin')||''; adminPin.addEventListener('input',()=>localStorage.setItem('adminPin',adminPin.value));
+    function setStatus(text,mode=''){statusText.textContent=text;statusPill.classList.toggle('ok',mode==='ok');statusPill.classList.toggle('bad',mode==='bad')}
+    function setModal(text,error=''){modalText.textContent=text;modalError.textContent=error;modalError.classList.toggle('show',!!error)}
+    function openChat(open){chatSheet.classList.toggle('open',open)}
+    function bubble(role,text){const el=document.createElement('div');el.className='bubble '+role;el.textContent=text;chatLog.appendChild(el);chatLog.scrollTop=chatLog.scrollHeight;return el}
+    function aiDelta(text){if(!currentAiBubble)currentAiBubble=bubble('ai','');currentAiBubble.textContent+=text;chatLog.scrollTop=chatLog.scrollHeight}
+    function speak(){clearTimeout(stopSpeakingTimer);root.classList.add('speaking')}
+    function stopSoon(){clearTimeout(stopSpeakingTimer);stopSpeakingTimer=setTimeout(()=>root.classList.remove('speaking'),1500)}
+    function isChange(text){const t=String(text||'').toLowerCase();return t.includes('änderung erstellen')||t.includes('aenderung erstellen')||t.includes('änderungswunsch')||t.includes('app ändern')||t.includes('app aendern')||t.includes('admin-modus')||t.includes('admin modus')}
+    function cleanChange(text){return String(text||'').replace(/admin[- ]modus/ig,'').replace(/änderung erstellen:?/ig,'').replace(/aenderung erstellen:?/ig,'').trim()}
+    function fail(message){setStatus(message,'bad');setModal('Start fehlgeschlagen.',message);bubble('system',message);startModal.classList.remove('hidden');startBtn.disabled=false;startBtn.textContent='Nochmal starten';connecting=false;disconnect(false)}
+    async function fetchWithTimeout(url,options={},ms=20000){const controller=new AbortController();const t=setTimeout(()=>controller.abort(),ms);try{return await fetch(url,{...options,signal:controller.signal})}finally{clearTimeout(t)}}
+    async function connect(){
+      if(connecting)return; connecting=true; startBtn.disabled=true; startBtn.textContent='Starte...'; setModal('Mikrofon wird angefragt...'); setStatus('Mikrofon wird gestartet...');
+      try{
+        if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Mikrofon wird in diesem Browser nicht unterstützt. Bitte Safari/Chrome mit HTTPS nutzen.');
+        const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+        setModal('Session wird erstellt...'); setStatus('Session wird erstellt...');
+        const sessionResp=await fetchWithTimeout('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instructions:DEFAULT_INSTRUCTIONS,voice:'alloy'})},20000);
+        const sessionText=await sessionResp.text(); let sessionData={}; try{sessionData=JSON.parse(sessionText)}catch(_){ }
+        const ephemeralKey=sessionData?.client_secret?.value; if(!sessionResp.ok||!ephemeralKey)throw new Error('/session Fehler '+sessionResp.status+': '+sessionText);
+        setModal('Audio wird verbunden...'); setStatus('Audio wird verbunden...');
+        remoteAudio=remoteAudio||document.createElement('audio'); remoteAudio.autoplay=true; remoteAudio.playsInline=true; remoteAudio.setAttribute('playsinline',''); document.body.appendChild(remoteAudio);
+        pc=new RTCPeerConnection(); pc.ontrack=(event)=>{remoteAudio.srcObject=event.streams[0];remoteAudio.play().catch(()=>{})}; pc.onconnectionstatechange=()=>setStatus('Verbindung: '+pc.connectionState,pc.connectionState==='connected'?'ok':'');
+        stream.getTracks().forEach((track)=>pc.addTrack(track,stream)); dc=pc.createDataChannel('oai-events'); dc.onopen=()=>setStatus('Sprich jetzt','ok'); dc.onerror=()=>setStatus('DataChannel-Fehler','bad'); dc.onmessage=(event)=>handleRealtime(event.data);
+        const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+        const sdpResp=await fetchWithTimeout('https://api.openai.com/v1/realtime?model=gpt-realtime',{method:'POST',body:offer.sdp,headers:{Authorization:'Bearer '+ephemeralKey,'Content-Type':'application/sdp'}},25000);
+        const answer=await sdpResp.text(); if(!sdpResp.ok)throw new Error('SDP Fehler '+sdpResp.status+': '+answer);
+        await pc.setRemoteDescription({type:'answer',sdp:answer}); startModal.classList.add('hidden'); startBtn.disabled=false; startBtn.textContent='Jetzt starten'; connecting=false; bubble('system','Sprachmodus aktiv. Für Änderungen sag: "Änderung erstellen: ..."');
+      }catch(error){fail(error?.name==='AbortError'?'Verbindung hat zu lange gedauert. Bitte erneut starten.':String(error.message||error))}
+    }
+    function disconnect(show=true){try{if(dc)dc.close();if(pc)pc.close()}catch(_){ } dc=null;pc=null;root.classList.remove('speaking'); if(show)startModal.classList.remove('hidden')}
+    function handleRealtime(raw){let msg;try{msg=JSON.parse(raw)}catch(_){return} const type=msg.type||''; if(type.startsWith('response.'))speak(); if(type==='response.audio.delta'||type==='response.audio_transcript.delta'||type==='response.created')speak(); if((type==='response.audio_transcript.delta'||type==='response.output_text.delta')&&msg.delta)aiDelta(msg.delta); if(type==='response.audio_transcript.done'||type==='response.done'||type==='response.output_text.done'){currentAiBubble=null;stopSoon()} if(type==='conversation.item.input_audio_transcription.completed'&&msg.transcript){lastUserTranscript=msg.transcript;bubble('me',msg.transcript);if(isChange(msg.transcript))createChangeRequest(msg.transcript)} if(type==='error')bubble('system',msg.error?.message||JSON.stringify(msg))}
+    async function createChangeRequest(source){const transcript=cleanChange(source||textInput.value||lastUserTranscript);if(!transcript){bubble('system','Kein Änderungswunsch erkannt.');return} if(!adminPin.value.trim()){openChat(true);bubble('system','Bitte Admin-PIN eintragen.');return} changeBtn.disabled=true;bubble('system','Erstelle GitHub-Änderung...');try{const res=await fetch('/change-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminPin:adminPin.value.trim(),transcript,summary:transcript.slice(0,180)})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||JSON.stringify(data));bubble('ai','Änderung erstellt: '+data.issueUrl);textInput.value=''}catch(e){bubble('system','Änderung fehlgeschlagen: '+e.message)}finally{changeBtn.disabled=false}}
+    function sendText(){const text=textInput.value.trim();if(!text)return;lastUserTranscript=text;bubble('me',text);if(isChange(text)){createChangeRequest(text);return} if(!dc||dc.readyState!=='open'){bubble('system','Voice-Verbindung ist noch nicht aktiv.');return} dc.send(JSON.stringify({type:'conversation.item.create',item:{type:'message',role:'user',content:[{type:'input_text',text}]}}));dc.send(JSON.stringify({type:'response.create'}));textInput.value=''}
+    async function uploadFile(){const file=fileInput.files[0];if(!file)return;const fd=new FormData();fd.append('file',file);bubble('system','Upload startet: '+file.name);try{const res=await fetch('/upload',{method:'POST',body:fd});const data=await res.json();if(!res.ok)throw new Error(data.error||'Upload fehlgeschlagen');bubble('me','[Datei hochgeladen] '+data.file.name)}catch(e){bubble('system',e.message)}}
+    function startTap(e){if(e){e.preventDefault();e.stopPropagation()}connect()}
+    startBtn.addEventListener('click',startTap); startBtn.addEventListener('touchend',startTap,{passive:false}); startBtn.addEventListener('pointerup',startTap);
+    sendBtn.addEventListener('click',sendText); changeBtn.addEventListener('click',()=>createChangeRequest(textInput.value||lastUserTranscript)); uploadBtn.addEventListener('click',uploadFile); textInput.addEventListener('keydown',(e)=>{if(e.key==='Enter')sendText()});
+    chatHandle.addEventListener('click',()=>openChat(!chatSheet.classList.contains('open'))); chatSheet.addEventListener('touchstart',(e)=>{dragStartY=e.touches[0].clientY},{passive:true}); chatSheet.addEventListener('touchend',(e)=>{const d=dragStartY-e.changedTouches[0].clientY;if(d>30)openChat(true);if(d<-30)openChat(false)},{passive:true}); document.body.addEventListener('touchstart',(e)=>{dragStartY=e.touches[0].clientY},{passive:true}); document.body.addEventListener('touchend',(e)=>{const d=dragStartY-e.changedTouches[0].clientY;if(d>55)openChat(true)},{passive:true});
+    setStatus('Bereit'); setModal('Einmal tippen, dann kannst du mit dem Agenten sprechen.');
+  </script>
+</body>
 </html>
