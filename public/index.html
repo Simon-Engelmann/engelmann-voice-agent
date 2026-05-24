@@ -1,297 +1,450 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Realtime Voice Agent</title>
+    <title>Engelmann Voice Agent</title>
     <style>
       :root {
-        --bg: #f5f5f7;
-        --card: rgba(255, 255, 255, 0.72);
+        --bg: #fbfbfd;
         --text: #1d1d1f;
         --muted: #6e6e73;
-        --accent: #0071e3;
-        --danger: #ff3b30;
+        --line: rgba(0,0,0,.08);
+        --card: rgba(255,255,255,.84);
+        --blue: #007aff;
+        --green: #34c759;
+        --red: #ff3b30;
       }
-      * { box-sizing: border-box; }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body { margin: 0; min-height: 100%; overflow: hidden; }
       body {
-        margin: 0;
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
-        background: linear-gradient(180deg, #f5f5f7 0%, #e9ecf1 100%);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+        background: radial-gradient(circle at 50% 45%, #f0f6ff 0, #fff 38%, var(--bg) 100%);
         color: var(--text);
+      }
+      .app {
         min-height: 100dvh;
-      }
-      .app { padding: 16px; max-width: 760px; margin: 0 auto; }
-      .glass {
-        background: var(--card);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.7);
-        border-radius: 24px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-      }
-      .hero { padding: 20px; text-align: center; }
-      .avatar {
-        width: 142px;
-        height: 142px;
-        border-radius: 50%;
-        margin: 8px auto 14px;
+        padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
         display: grid;
         place-items: center;
-        font-size: 58px;
-        background: radial-gradient(circle at 30% 20%, #89c3ff, #0a84ff 60%, #0054ad 100%);
-        box-shadow: 0 10px 28px rgba(10, 132, 255, 0.45);
-        transition: transform 0.2s ease;
+        position: relative;
       }
-      .avatar.speaking {
-        animation: speak 0.6s ease-in-out infinite alternate;
-      }
-      @keyframes speak {
-        from { transform: scale(1); }
-        to { transform: scale(1.08); }
-      }
-      h1 { font-size: 24px; margin: 4px 0 10px; }
-      p { margin: 6px 0; color: var(--muted); }
-      .row { display: flex; gap: 10px; margin-top: 12px; }
-      button, input, textarea {
-        border: 0;
-        border-radius: 14px;
-        padding: 12px;
-        font-size: 16px;
-      }
-      button { font-weight: 600; }
-      .btn-primary { background: var(--accent); color: #fff; flex: 1; }
-      .btn-danger { background: var(--danger); color: #fff; flex: 1; }
-      textarea, input {
-        width: 100%;
-        margin-top: 10px;
-        border: 1px solid #d2d2d7;
-        background: #fff;
-      }
-      .swipe-hint {
-        text-align: center;
-        margin-top: 14px;
+      .status-pill {
+        position: fixed;
+        top: max(14px, env(safe-area-inset-top));
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        max-width: calc(100vw - 32px);
+        padding: 7px 13px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255,255,255,.78);
+        backdrop-filter: blur(18px);
+        box-shadow: 0 8px 24px rgba(0,0,0,.05);
         color: var(--muted);
         font-size: 13px;
+        white-space: nowrap;
       }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #c7c7cc; }
+      .connected .dot { background: var(--green); box-shadow: 0 0 0 6px rgba(52,199,89,.12); }
+      .error .dot { background: var(--red); box-shadow: 0 0 0 6px rgba(255,59,48,.12); }
+      .avatar-wrap { width: min(72vw, 360px); height: min(72vw, 360px); display: grid; place-items: center; }
+      .avatar {
+        width: 100%;
+        height: 100%;
+        filter: drop-shadow(0 35px 38px rgba(37,70,120,.15));
+        animation: idleFloat 4.8s ease-in-out infinite;
+        transform-origin: 50% 85%;
+      }
+      .avatar .head { animation: idleHead 5.8s ease-in-out infinite; transform-origin: 50% 42%; }
+      .avatar .body { animation: breathe 3.2s ease-in-out infinite; transform-origin: 50% 68%; }
+      .avatar .mouth { transform-origin: 50% 50%; transition: transform .08s ease, opacity .08s ease; }
+      .avatar .arm-left { animation: idleArmLeft 4s ease-in-out infinite; transform-origin: 48% 58%; }
+      .avatar .arm-right { animation: idleArmRight 4.4s ease-in-out infinite; transform-origin: 52% 58%; }
+      .speaking .avatar { animation: speakBody .58s ease-in-out infinite alternate; }
+      .speaking .avatar .head { animation: speakHead .42s ease-in-out infinite alternate; }
+      .speaking .avatar .mouth { animation: mouth .16s ease-in-out infinite alternate; }
+      .speaking .avatar .arm-left { animation: talkArmLeft .82s ease-in-out infinite alternate; }
+      .speaking .avatar .arm-right { animation: talkArmRight .78s ease-in-out infinite alternate; }
+      @keyframes idleFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+      @keyframes idleHead { 0%,100%{transform:rotate(-1deg)} 50%{transform:rotate(1.2deg)} }
+      @keyframes breathe { 0%,100%{transform:scale(1)} 50%{transform:scale(1.018)} }
+      @keyframes idleArmLeft { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(2deg)} }
+      @keyframes idleArmRight { 0%,100%{transform:rotate(0deg)} 50%{transform:rotate(-2deg)} }
+      @keyframes speakBody { from{transform:translateY(0) scale(1)} to{transform:translateY(-6px) scale(1.025)} }
+      @keyframes speakHead { from{transform:rotate(-2deg) translateY(0)} to{transform:rotate(2deg) translateY(-3px)} }
+      @keyframes mouth { from{transform:scaleY(.45);opacity:.7} to{transform:scaleY(1.8);opacity:1} }
+      @keyframes talkArmLeft { from{transform:rotate(-4deg)} to{transform:rotate(8deg)} }
+      @keyframes talkArmRight { from{transform:rotate(4deg)} to{transform:rotate(-8deg)} }
+      .swipe-hint {
+        position: fixed;
+        bottom: max(18px, env(safe-area-inset-bottom));
+        left: 50%;
+        transform: translateX(-50%);
+        color: #b0b0b7;
+        font-size: 12px;
+        text-align: center;
+      }
+      .hint-bar { width: 42px; height: 5px; background: #d1d1d6; border-radius: 4px; margin: 0 auto 8px; }
+      .modal {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 22px;
+        z-index: 50;
+        background: rgba(251,251,253,.58);
+        backdrop-filter: blur(8px);
+      }
+      .modal.hidden { display: none; }
+      .modal-card {
+        width: min(420px, 100%);
+        padding: 26px;
+        border-radius: 28px;
+        background: rgba(255,255,255,.92);
+        box-shadow: 0 24px 70px rgba(0,0,0,.14);
+        border: 1px solid var(--line);
+        text-align: center;
+      }
+      h1 { margin: 0 0 8px; font-size: 24px; }
+      p { margin: 0 0 18px; color: var(--muted); line-height: 1.38; }
+      button, input {
+        width: 100%;
+        min-height: 48px;
+        border: 0;
+        border-radius: 16px;
+        padding: 12px 14px;
+        font: inherit;
+      }
+      button { background: var(--blue); color: white; font-weight: 700; cursor: pointer; }
+      button:disabled { opacity: .55; cursor: default; }
+      input { background: #f5f5f7; border: 1px solid var(--line); color: var(--text); }
       .chat-sheet {
         position: fixed;
         left: 0;
         right: 0;
         bottom: 0;
-        height: 70dvh;
-        border-top-left-radius: 24px;
-        border-top-right-radius: 24px;
-        background: rgba(255, 255, 255, 0.95);
-        transform: translateY(calc(100% - 62px));
-        transition: transform 0.25s ease;
-        box-shadow: 0 -15px 35px rgba(0, 0, 0, 0.12);
+        height: min(78dvh, 760px);
+        z-index: 30;
+        transform: translateY(calc(100% - 56px));
+        transition: transform .26s ease;
+        border-radius: 30px 30px 0 0;
+        background: rgba(255,255,255,.95);
+        backdrop-filter: blur(24px);
+        border: 1px solid var(--line);
+        box-shadow: 0 -28px 70px rgba(0,0,0,.12);
         display: flex;
         flex-direction: column;
+        overflow: hidden;
       }
       .chat-sheet.open { transform: translateY(0); }
-      .handle { width: 56px; height: 5px; border-radius: 3px; background: #c7c7cc; margin: 10px auto; }
-      .chat-header { text-align: center; font-weight: 600; padding-bottom: 8px; }
-      .chat-log {
-        flex: 1;
-        overflow: auto;
-        padding: 0 14px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .bubble { padding: 10px 12px; border-radius: 14px; max-width: 85%; }
-      .me { align-self: flex-end; background: #0071e3; color: #fff; }
-      .ai { align-self: flex-start; background: #e9e9ed; }
-      .chat-input { padding: 10px 12px 16px; }
-      @media (min-width: 768px) {
-        .chat-sheet { max-width: 760px; margin: 0 auto; }
-      }
+      @media (min-width: 760px) { .chat-sheet { left: 50%; right: auto; width: 720px; transform: translate(-50%, calc(100% - 56px)); } .chat-sheet.open { transform: translate(-50%, 0); } }
+      .handle-wrap { padding: 10px 18px 6px; text-align: center; }
+      .handle { width: 48px; height: 5px; border-radius: 6px; background: #d1d1d6; margin: 0 auto 8px; }
+      .chat-title { font-weight: 700; font-size: 15px; }
+      .chat-log { flex: 1; overflow: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 9px; }
+      .bubble { max-width: 88%; padding: 11px 13px; border-radius: 18px; line-height: 1.35; font-size: 15px; white-space: pre-wrap; }
+      .me { align-self: flex-end; background: var(--blue); color: white; border-bottom-right-radius: 6px; }
+      .ai { align-self: flex-start; background: #f1f1f4; color: var(--text); border-bottom-left-radius: 6px; }
+      .system { align-self: center; max-width: 94%; background: #fff8dc; color: #6b5b00; font-size: 13px; }
+      .chat-controls { padding: 10px 14px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); display: grid; gap: 8px; }
+      .control-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+      .control-row button { width: auto; padding-inline: 16px; }
+      .secondary { background: #1d1d1f; }
+      .ghost { background: #f2f2f7; color: var(--text); }
+      .file-input { font-size: 14px; }
+      a { color: inherit; }
     </style>
   </head>
   <body>
-    <main class="app">
-      <section class="glass hero">
-        <div id="avatar" class="avatar">🧠</div>
-        <h1>Realtime Voice Agent</h1>
-        <p id="status">Disconnected</p>
+    <div id="root" class="app">
+      <div id="statusPill" class="status-pill"><span class="dot"></span><span id="status">Bereit</span></div>
+      <div id="avatarStage" class="avatar-wrap" aria-label="Avatar">
+        <svg class="avatar" viewBox="0 0 360 360" role="img" aria-label="Cartoon Avatar">
+          <defs>
+            <radialGradient id="skin" cx="42%" cy="24%" r="70%"><stop offset="0" stop-color="#ffe0bf"/><stop offset="1" stop-color="#f3a56f"/></radialGradient>
+            <linearGradient id="shirt" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#2f7bff"/><stop offset="1" stop-color="#0b2d68"/></linearGradient>
+            <linearGradient id="hair" x1="0" x2="1"><stop offset="0" stop-color="#7a3a12"/><stop offset="1" stop-color="#23130b"/></linearGradient>
+          </defs>
+          <ellipse cx="180" cy="326" rx="76" ry="14" fill="#dce7f7" opacity=".75"/>
+          <g class="body">
+            <path d="M128 208c10-31 32-49 52-49s42 18 52 49l21 88c2 9-4 17-13 17H120c-9 0-15-8-13-17l21-88z" fill="url(#shirt)"/>
+            <path d="M151 168c13 14 45 14 58 0l-7 32h-44l-7-32z" fill="url(#skin)"/>
+            <path d="M151 209h58" stroke="#ffffff" stroke-width="4" opacity=".75"/>
+            <g class="arm-left"><path d="M130 218c-22 17-35 39-37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/><circle cx="92" cy="290" r="9" fill="url(#skin)"/></g>
+            <g class="arm-right"><path d="M230 218c22 17 35 39 37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/><circle cx="268" cy="290" r="9" fill="url(#skin)"/></g>
+            <path d="M151 313l-6 28h28l3-28zm58 0 6 28h-28l-3-28z" fill="#153b7c"/>
+          </g>
+          <g class="head">
+            <path d="M114 127c4-50 30-84 71-82 41 2 66 34 62 82-2 28-17 54-39 68-16 10-41 10-57 0-22-14-35-40-37-68z" fill="url(#skin)"/>
+            <path d="M119 111c8-45 38-72 76-67 32 4 55 27 58 62-20-16-48-24-86-22-20 1-35 9-48 27z" fill="url(#hair)"/>
+            <path d="M116 118c-8 22-5 48 5 69-25-20-28-63-5-87z" fill="url(#hair)" opacity=".95"/>
+            <circle cx="158" cy="133" r="7" fill="#1d1d1f"/><circle cx="204" cy="133" r="7" fill="#1d1d1f"/>
+            <circle cx="155" cy="130" r="2" fill="white"/><circle cx="201" cy="130" r="2" fill="white"/>
+            <path d="M147 119c12-7 22-7 31-1M192 118c10-6 21-5 31 2" stroke="#2a160d" stroke-width="5" stroke-linecap="round" fill="none"/>
+            <path d="M181 139c-3 8-5 15-1 21" stroke="#c7794b" stroke-width="4" stroke-linecap="round" fill="none"/>
+            <ellipse class="mouth" cx="181" cy="174" rx="18" ry="6" fill="#7b1d1d"/>
+            <path d="M162 178c10 10 29 10 39 0" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".9"/>
+          </g>
+        </svg>
+      </div>
+      <div class="swipe-hint"><div class="hint-bar"></div>Nach oben wischen für Verlauf und Admin</div>
+    </div>
 
-        <label for="instructions">Agent Instructions</label>
-        <textarea id="instructions" rows="3">You are a helpful general ChatGPT voice assistant.</textarea>
-
-        <div class="row">
-          <button id="connectBtn" class="btn-primary">Connect</button>
-          <button id="disconnectBtn" class="btn-danger" disabled>Disconnect</button>
-        </div>
-
-        <label for="fileInput">Photo/File Upload</label>
-        <input type="file" id="fileInput" />
-        <button id="uploadBtn" class="btn-primary" style="margin-top:10px;width:100%">Upload</button>
-        <p id="uploadStatus"></p>
-        <p class="swipe-hint">Swipe up to open chat ↑</p>
-      </section>
-    </main>
+    <div id="startModal" class="modal">
+      <div class="modal-card">
+        <h1>Sprachmodus starten</h1>
+        <p>Einmal tippen, dann kannst du mit dem Agenten sprechen.</p>
+        <button id="startBtn">Jetzt starten</button>
+      </div>
+    </div>
 
     <section id="chatSheet" class="chat-sheet">
-      <div id="chatHandle" class="handle"></div>
-      <div class="chat-header">Chat</div>
+      <div id="chatHandle" class="handle-wrap"><div class="handle"></div><div class="chat-title">Verlauf & Admin</div></div>
       <div id="chatLog" class="chat-log"></div>
-      <div class="chat-input">
-        <input id="textInput" placeholder="Type a message" />
-        <button id="sendBtn" class="btn-primary" style="margin-top:8px;width:100%">Send</button>
+      <div class="chat-controls">
+        <div class="control-row">
+          <input id="textInput" placeholder="Nachricht oder Änderungswunsch" autocomplete="off" />
+          <button id="sendBtn">Senden</button>
+        </div>
+        <div class="control-row">
+          <input id="adminPin" placeholder="Admin-PIN" type="password" inputmode="numeric" autocomplete="off" />
+          <button id="changeBtn" class="secondary">Änderung</button>
+        </div>
+        <div class="control-row">
+          <input id="fileInput" class="file-input" type="file" />
+          <button id="uploadBtn" class="ghost">Upload</button>
+        </div>
       </div>
     </section>
 
     <script>
-      const avatar = document.getElementById('avatar');
+      const DEFAULT_INSTRUCTIONS = 'Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, ausser der Nutzer wuenscht eine andere Sprache. Antworte natuerlich, klar und knapp.';
+      const root = document.getElementById('root');
+      const statusPill = document.getElementById('statusPill');
       const statusEl = document.getElementById('status');
-      const connectBtn = document.getElementById('connectBtn');
-      const disconnectBtn = document.getElementById('disconnectBtn');
-      const uploadBtn = document.getElementById('uploadBtn');
-      const fileInput = document.getElementById('fileInput');
-      const uploadStatus = document.getElementById('uploadStatus');
-      const textInput = document.getElementById('textInput');
-      const sendBtn = document.getElementById('sendBtn');
-      const chatLog = document.getElementById('chatLog');
+      const avatarStage = document.getElementById('avatarStage');
+      const startModal = document.getElementById('startModal');
+      const startBtn = document.getElementById('startBtn');
       const chatSheet = document.getElementById('chatSheet');
       const chatHandle = document.getElementById('chatHandle');
-      const instructions = document.getElementById('instructions');
+      const chatLog = document.getElementById('chatLog');
+      const textInput = document.getElementById('textInput');
+      const sendBtn = document.getElementById('sendBtn');
+      const adminPin = document.getElementById('adminPin');
+      const changeBtn = document.getElementById('changeBtn');
+      const fileInput = document.getElementById('fileInput');
+      const uploadBtn = document.getElementById('uploadBtn');
 
       let pc = null;
       let dc = null;
+      let remoteAudio = null;
       let dragStartY = 0;
+      let lastUserTranscript = '';
+      let currentAiBubble = null;
+      let stopSpeakingTimer = null;
+
+      adminPin.value = localStorage.getItem('adminPin') || '';
+      adminPin.addEventListener('input', () => localStorage.setItem('adminPin', adminPin.value));
+
+      function setStatus(text, mode = '') {
+        statusEl.textContent = text;
+        statusPill.classList.toggle('connected', mode === 'connected');
+        statusPill.classList.toggle('error', mode === 'error');
+      }
+
+      function openChat(open) { chatSheet.classList.toggle('open', open); }
 
       function appendBubble(role, text) {
         const el = document.createElement('div');
-        el.className = `bubble ${role === 'me' ? 'me' : 'ai'}`;
+        el.className = `bubble ${role}`;
         el.textContent = text;
         chatLog.appendChild(el);
         chatLog.scrollTop = chatLog.scrollHeight;
+        return el;
       }
 
-      function setConnected(isConnected) {
-        connectBtn.disabled = isConnected;
-        disconnectBtn.disabled = !isConnected;
-        statusEl.textContent = isConnected ? 'Connected' : 'Disconnected';
+      function appendAiDelta(text) {
+        if (!currentAiBubble) currentAiBubble = appendBubble('ai', '');
+        currentAiBubble.textContent += text;
+        chatLog.scrollTop = chatLog.scrollHeight;
       }
 
-      function openChat(open) {
-        chatSheet.classList.toggle('open', open);
+      function startSpeaking() {
+        clearTimeout(stopSpeakingTimer);
+        avatarStage.classList.add('speaking');
+      }
+
+      function stopSpeakingSoon() {
+        clearTimeout(stopSpeakingTimer);
+        stopSpeakingTimer = setTimeout(() => avatarStage.classList.remove('speaking'), 1500);
+      }
+
+      function shouldCreateChangeRequest(text) {
+        const t = String(text || '').toLowerCase();
+        return t.includes('änderung erstellen') || t.includes('aenderung erstellen') || t.includes('änderungswunsch') || t.includes('app ändern') || t.includes('app aendern') || t.includes('admin-modus') || t.includes('admin modus');
+      }
+
+      function cleanChangeText(text) {
+        return String(text || '')
+          .replace(/admin[- ]modus/ig, '')
+          .replace(/änderung erstellen:?/ig, '')
+          .replace(/aenderung erstellen:?/ig, '')
+          .trim();
+      }
+
+      async function createChangeRequest(sourceText) {
+        const transcript = cleanChangeText(sourceText || textInput.value || lastUserTranscript);
+        if (!transcript) { appendBubble('system', 'Kein Änderungswunsch erkannt.'); return; }
+        if (!adminPin.value.trim()) { openChat(true); appendBubble('system', 'Bitte Admin-PIN eintragen.'); return; }
+
+        changeBtn.disabled = true;
+        appendBubble('system', 'Erstelle GitHub-Änderung...');
+        try {
+          const res = await fetch('/change-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminPin: adminPin.value.trim(), transcript, summary: transcript.slice(0, 180) })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || JSON.stringify(data));
+          appendBubble('ai', `Änderung erstellt: ${data.issueUrl}`);
+          textInput.value = '';
+        } catch (error) {
+          appendBubble('system', `Änderung fehlgeschlagen: ${error.message}`);
+        } finally {
+          changeBtn.disabled = false;
+        }
       }
 
       async function connect() {
-        statusEl.textContent = 'Connecting...';
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        startBtn.disabled = true;
+        setStatus('Mikrofon wird gestartet...');
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const sessionResp = await fetch('/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ instructions: DEFAULT_INSTRUCTIONS, voice: 'alloy' })
+          });
+          const sessionText = await sessionResp.text();
+          let sessionData = {};
+          try { sessionData = JSON.parse(sessionText); } catch (_) {}
+          const ephemeralKey = sessionData?.client_secret?.value;
+          if (!sessionResp.ok || !ephemeralKey) throw new Error(`/session Fehler ${sessionResp.status}: ${sessionText}`);
 
-        const sessionResp = await fetch('/session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instructions: instructions.value })
-        });
-        const sessionData = await sessionResp.json();
-        const ephemeralKey = sessionData?.client_secret?.value;
-        if (!sessionResp.ok || !ephemeralKey) {
-          throw new Error('Could not create session');
+          remoteAudio = remoteAudio || document.createElement('audio');
+          remoteAudio.autoplay = true;
+          remoteAudio.playsInline = true;
+          document.body.appendChild(remoteAudio);
+
+          pc = new RTCPeerConnection();
+          pc.ontrack = (event) => { remoteAudio.srcObject = event.streams[0]; remoteAudio.play().catch(() => {}); };
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+          dc = pc.createDataChannel('oai-events');
+          dc.onopen = () => setStatus('Sprich jetzt', 'connected');
+          dc.onerror = () => setStatus('DataChannel-Fehler', 'error');
+          dc.onmessage = (event) => handleRealtimeEvent(event.data);
+
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          const sdpResp = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
+            method: 'POST',
+            body: offer.sdp,
+            headers: { Authorization: `Bearer ${ephemeralKey}`, 'Content-Type': 'application/sdp' }
+          });
+          const answer = await sdpResp.text();
+          if (!sdpResp.ok) throw new Error(`SDP Fehler ${sdpResp.status}: ${answer}`);
+          await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+          startModal.classList.add('hidden');
+          appendBubble('system', 'Sprachmodus aktiv. Für Änderungen sag: "Änderung erstellen: ..."');
+        } catch (error) {
+          setStatus(error.message, 'error');
+          appendBubble('system', error.message);
+          startModal.classList.remove('hidden');
+          startBtn.disabled = false;
+          disconnect(false);
         }
-
-        pc = new RTCPeerConnection();
-        pc.ontrack = (event) => {
-          const audio = new Audio();
-          audio.srcObject = event.streams[0];
-          audio.play();
-        };
-
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-        dc = pc.createDataChannel('oai-events');
-
-        dc.onmessage = (event) => {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'response.output_text.delta' && msg.delta) {
-            avatar.classList.add('speaking');
-            appendBubble('ai', msg.delta);
-          }
-          if (msg.type === 'response.output_text.done') {
-            avatar.classList.remove('speaking');
-          }
-          if (msg.type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
-            appendBubble('me', msg.transcript);
-          }
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        const sdpResp = await fetch('https://api.openai.com/v1/realtime?model=gpt-realtime', {
-          method: 'POST',
-          body: offer.sdp,
-          headers: {
-            Authorization: `Bearer ${ephemeralKey}`,
-            'Content-Type': 'application/sdp'
-          }
-        });
-
-        const answer = await sdpResp.text();
-        await pc.setRemoteDescription({ type: 'answer', sdp: answer });
-        setConnected(true);
       }
 
-      function disconnect() {
+      function handleRealtimeEvent(raw) {
+        let msg;
+        try { msg = JSON.parse(raw); } catch (_) { return; }
+        const type = msg.type || '';
+        if (type.startsWith('response.')) startSpeaking();
+        if (type === 'response.audio.delta' || type === 'response.audio_transcript.delta' || type === 'response.created') startSpeaking();
+        if (type === 'response.audio_transcript.delta' && msg.delta) appendAiDelta(msg.delta);
+        if (type === 'response.output_text.delta' && msg.delta) appendAiDelta(msg.delta);
+        if (type === 'response.audio_transcript.done' || type === 'response.done' || type === 'response.output_text.done') {
+          currentAiBubble = null;
+          stopSpeakingSoon();
+        }
+        if (type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
+          lastUserTranscript = msg.transcript;
+          appendBubble('me', msg.transcript);
+          if (shouldCreateChangeRequest(msg.transcript)) createChangeRequest(msg.transcript);
+        }
+        if (type === 'error') appendBubble('system', msg.error?.message || JSON.stringify(msg));
+      }
+
+      function disconnect(showModal = true) {
         if (dc) dc.close();
         if (pc) pc.close();
         dc = null;
         pc = null;
-        avatar.classList.remove('speaking');
-        setConnected(false);
+        avatarStage.classList.remove('speaking');
+        if (showModal) startModal.classList.remove('hidden');
       }
 
       function sendText() {
         const text = textInput.value.trim();
-        if (!text || !dc) return;
-
-        dc.send(JSON.stringify({
-          type: 'conversation.item.create',
-          item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] }
-        }));
-        dc.send(JSON.stringify({ type: 'response.create' }));
-
+        if (!text) return;
+        lastUserTranscript = text;
         appendBubble('me', text);
+        if (shouldCreateChangeRequest(text)) { createChangeRequest(text); return; }
+        if (!dc || dc.readyState !== 'open') { appendBubble('system', 'Voice-Verbindung ist noch nicht aktiv.'); return; }
+        dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } }));
+        dc.send(JSON.stringify({ type: 'response.create' }));
         textInput.value = '';
       }
 
       async function uploadFile() {
         const file = fileInput.files[0];
         if (!file) return;
-
         const formData = new FormData();
         formData.append('file', file);
-
-        uploadStatus.textContent = 'Uploading...';
-        const res = await fetch('/upload', { method: 'POST', body: formData });
-        const data = await res.json();
-
-        if (!res.ok) {
-          uploadStatus.textContent = data.error || 'Upload failed';
-          return;
+        appendBubble('system', `Upload startet: ${file.name}`);
+        try {
+          const res = await fetch('/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Upload fehlgeschlagen');
+          appendBubble('me', `[Datei hochgeladen] ${data.file.name}`);
+        } catch (error) {
+          appendBubble('system', error.message);
         }
-
-        uploadStatus.textContent = `Uploaded ${data.file.name}`;
-        appendBubble('me', `[File uploaded] ${data.file.name}`);
       }
 
-      connectBtn.addEventListener('click', () => connect().catch((e) => {
-        statusEl.textContent = `Error: ${e.message}`;
-        disconnect();
-      }));
-      disconnectBtn.addEventListener('click', disconnect);
+      startBtn.addEventListener('click', connect);
       sendBtn.addEventListener('click', sendText);
+      changeBtn.addEventListener('click', () => createChangeRequest(textInput.value || lastUserTranscript));
       uploadBtn.addEventListener('click', uploadFile);
       textInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendText(); });
-
       chatHandle.addEventListener('click', () => openChat(!chatSheet.classList.contains('open')));
       chatSheet.addEventListener('touchstart', (e) => { dragStartY = e.touches[0].clientY; }, { passive: true });
       chatSheet.addEventListener('touchend', (e) => {
         const delta = dragStartY - e.changedTouches[0].clientY;
         if (delta > 30) openChat(true);
         if (delta < -30) openChat(false);
+      }, { passive: true });
+      document.body.addEventListener('touchstart', (e) => { dragStartY = e.touches[0].clientY; }, { passive: true });
+      document.body.addEventListener('touchend', (e) => {
+        const delta = dragStartY - e.changedTouches[0].clientY;
+        if (delta > 55) openChat(true);
       }, { passive: true });
     </script>
   </body>
