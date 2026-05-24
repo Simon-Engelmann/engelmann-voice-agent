@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Engelmann Voice Agent</title>
 
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
   <style>
     :root {
       --bg: #fbfbfd;
@@ -15,7 +26,6 @@
       --green: #34c759;
       --red: #ff3b30;
       --glass: rgba(255,255,255,.78);
-      --avatar-scale: 1;
       --mouth-scale: .35;
       --voice-lift: 0px;
       --voice-glow: .12;
@@ -35,19 +45,8 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at 50% 38%, rgba(219,236,255,.96) 0, rgba(255,255,255,1) 42%, var(--bg) 100%);
+      background: radial-gradient(circle at 50% 38%, rgba(219,236,255,.96) 0, #ffffff 42%, var(--bg) 100%);
       color: var(--text);
-    }
-
-    body.dark {
-      --bg: #050506;
-      --text: #f5f5f7;
-      --muted: #a1a1a6;
-      --line: rgba(255,255,255,.14);
-      --glass: rgba(28,28,30,.74);
-      background:
-        radial-gradient(circle at 50% 38%, #172033 0, #0b0b0c 48%, #050506 100%);
     }
 
     .app {
@@ -72,12 +71,8 @@
     }
 
     @keyframes aurora {
-      from {
-        transform: translate3d(-1%, -1%, 0) scale(1);
-      }
-      to {
-        transform: translate3d(1.5%, 1%, 0) scale(1.04);
-      }
+      from { transform: translate3d(-1%, -1%, 0) scale(1); }
+      to { transform: translate3d(1.5%, 1%, 0) scale(1.04); }
     }
 
     .top {
@@ -131,13 +126,11 @@
       position: relative;
       display: grid;
       place-items: center;
-      width: min(86vw, 430px);
-      height: min(86vw, 430px);
+      width: min(88vw, 480px);
+      height: min(88vw, 480px);
       isolation: isolate;
-      transform:
-        translateY(var(--voice-lift))
-        scale(var(--avatar-scale));
-      transition: transform .22s ease;
+      transform: translateY(var(--voice-lift));
+      transition: transform .18s ease;
     }
 
     .stage::before {
@@ -146,177 +139,42 @@
       width: 74%;
       height: 74%;
       border-radius: 50%;
-      background:
-        radial-gradient(circle at 42% 32%, rgba(255,255,255,.88), rgba(255,255,255,.42) 46%, rgba(0,122,255,.06) 72%, transparent 100%);
+      background: radial-gradient(circle at 42% 32%, rgba(255,255,255,.88), rgba(255,255,255,.42) 46%, rgba(0,122,255,.06) 72%, transparent 100%);
       box-shadow:
-        0 32px 90px rgba(0, 72, 180, calc(.10 + var(--voice-glow))),
+        0 32px 90px rgba(0,72,180,calc(.10 + var(--voice-glow))),
         inset 0 1px 0 rgba(255,255,255,.88);
       z-index: -1;
       animation: halo 5.8s ease-in-out infinite;
     }
 
     @keyframes halo {
-      0%,100% {
-        transform: scale(1);
-        opacity: .92;
-      }
-      50% {
-        transform: scale(1.04);
-        opacity: 1;
-      }
+      0%,100% { transform: scale(1); opacity: .92; }
+      50% { transform: scale(1.04); opacity: 1; }
     }
 
-    .avatar-box {
-      width: min(74vw, 370px);
-      height: min(74vw, 370px);
-      display: grid;
-      place-items: center;
-      filter: drop-shadow(0 34px 38px rgba(37,70,120,.16));
-      animation: float 4.8s ease-in-out infinite;
+    #threeWrap {
+      width: min(88vw, 480px);
+      height: min(88vw, 480px);
+      position: relative;
     }
 
-    .speaking .avatar-box {
-      animation: speakBody .54s ease-in-out infinite alternate;
-    }
-
-    svg {
+    canvas {
       width: 100%;
       height: 100%;
-      overflow: visible;
+      display: block;
     }
 
-    .head {
-      animation: headIdle 5.6s ease-in-out infinite;
-      transform-origin: 50% 44%;
+    .fallbackFace {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      font-size: 90px;
+      filter: drop-shadow(0 20px 35px rgba(0,0,0,.18));
     }
 
-    .body {
-      animation: breathe 3.2s ease-in-out infinite;
-      transform-origin: 50% 70%;
-    }
-
-    .mouth {
-      transform-box: fill-box;
-      transform-origin: center;
-      transform: scaleY(var(--mouth-scale));
-      transition: transform .055s linear;
-    }
-
-    .arm-left {
-      animation: armLeftIdle 4s ease-in-out infinite;
-      transform-origin: 48% 58%;
-    }
-
-    .arm-right {
-      animation: armRightIdle 4.4s ease-in-out infinite;
-      transform-origin: 52% 58%;
-    }
-
-    .speaking .head {
-      animation: headTalk .42s ease-in-out infinite alternate;
-    }
-
-    .speaking .arm-left {
-      animation: armLeftTalk .78s ease-in-out infinite alternate;
-    }
-
-    .speaking .arm-right {
-      animation: armRightTalk .74s ease-in-out infinite alternate;
-    }
-
-    .eye {
-      transform-origin: center;
-      animation: blink 5.6s infinite;
-    }
-
-    @keyframes blink {
-      0%, 92%, 100% {
-        transform: scaleY(1);
-      }
-      94%, 96% {
-        transform: scaleY(.12);
-      }
-    }
-
-    @keyframes float {
-      0%,100% {
-        transform: translateY(0);
-      }
-      50% {
-        transform: translateY(-10px);
-      }
-    }
-
-    @keyframes breathe {
-      0%,100% {
-        transform: scale(1);
-      }
-      50% {
-        transform: scale(1.018);
-      }
-    }
-
-    @keyframes headIdle {
-      0%,100% {
-        transform: rotate(-1deg);
-      }
-      50% {
-        transform: rotate(1.2deg);
-      }
-    }
-
-    @keyframes speakBody {
-      from {
-        transform: translateY(0) scale(1);
-      }
-      to {
-        transform: translateY(-6px) scale(1.022);
-      }
-    }
-
-    @keyframes headTalk {
-      from {
-        transform: rotate(-2.4deg) translateY(0);
-      }
-      to {
-        transform: rotate(2.4deg) translateY(-3px);
-      }
-    }
-
-    @keyframes armLeftIdle {
-      0%,100% {
-        transform: rotate(0deg);
-      }
-      50% {
-        transform: rotate(2deg);
-      }
-    }
-
-    @keyframes armRightIdle {
-      0%,100% {
-        transform: rotate(0deg);
-      }
-      50% {
-        transform: rotate(-2deg);
-      }
-    }
-
-    @keyframes armLeftTalk {
-      from {
-        transform: rotate(-4deg);
-      }
-      to {
-        transform: rotate(8deg);
-      }
-    }
-
-    @keyframes armRightTalk {
-      from {
-        transform: rotate(4deg);
-      }
-      to {
-        transform: rotate(-8deg);
-      }
+    .fallbackFace.show {
+      display: grid;
     }
 
     .hint {
@@ -358,10 +216,6 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
-    }
-
-    body.dark .sheet {
-      background: rgba(28,28,30,.94);
     }
 
     .sheet.open {
@@ -431,21 +285,12 @@
       border-bottom-left-radius: 6px;
     }
 
-    body.dark .ai {
-      background: #2c2c2e;
-    }
-
     .system {
       align-self: center;
       max-width: 94%;
       background: #fff8dc;
       color: #6b5b00;
       font-size: 13px;
-    }
-
-    body.dark .system {
-      background: #3a3212;
-      color: #fff0a8;
     }
 
     .modal {
@@ -460,10 +305,6 @@
       -webkit-backdrop-filter: blur(12px);
     }
 
-    body.dark .modal {
-      background: rgba(0,0,0,.55);
-    }
-
     .modal.show {
       display: grid;
     }
@@ -476,10 +317,6 @@
       box-shadow: 0 24px 70px rgba(0,0,0,.14);
       border: 1px solid var(--line);
       text-align: center;
-    }
-
-    body.dark .card {
-      background: rgba(28,28,30,.95);
     }
 
     .card h1 {
@@ -532,80 +369,13 @@
     <div class="top">
       <div id="statusPill" class="pill">
         <span class="dot"></span>
-        <span id="statusText">Verbinde...</span>
+        <span id="statusText">Lade Avatar...</span>
       </div>
     </div>
 
     <div class="stage">
-      <div class="avatar-box" aria-label="Avatar">
-        <svg viewBox="0 0 360 360" role="img" aria-label="Cartoon Avatar">
-          <defs>
-            <radialGradient id="skin" cx="42%" cy="24%" r="70%">
-              <stop offset="0" stop-color="#ffe0bf"/>
-              <stop offset="1" stop-color="#f3a56f"/>
-            </radialGradient>
-
-            <linearGradient id="shirt" x1="0" x2="1" y1="0" y2="1">
-              <stop offset="0" stop-color="#2f7bff"/>
-              <stop offset="1" stop-color="#0b2d68"/>
-            </linearGradient>
-
-            <linearGradient id="hair" x1="0" x2="1">
-              <stop offset="0" stop-color="#7a3a12"/>
-              <stop offset="1" stop-color="#23130b"/>
-            </linearGradient>
-
-            <radialGradient id="cheek" cx="50%" cy="50%" r="50%">
-              <stop offset="0" stop-color="#ff8f8f" stop-opacity=".38"/>
-              <stop offset="1" stop-color="#ff8f8f" stop-opacity="0"/>
-            </radialGradient>
-          </defs>
-
-          <ellipse cx="180" cy="326" rx="78" ry="15" fill="#dce7f7" opacity=".72"/>
-
-          <g class="body">
-            <path d="M128 209c10-32 32-50 52-50s42 18 52 50l21 87c2 9-4 17-13 17H120c-9 0-15-8-13-17l21-87z" fill="url(#shirt)"/>
-            <path d="M151 168c13 14 45 14 58 0l-7 32h-44l-7-32z" fill="url(#skin)"/>
-            <path d="M151 209h58" stroke="#fff" stroke-width="4" opacity=".75"/>
-
-            <g class="arm-left">
-              <path d="M130 220c-22 17-35 39-37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/>
-              <circle cx="92" cy="292" r="9" fill="url(#skin)"/>
-            </g>
-
-            <g class="arm-right">
-              <path d="M230 220c22 17 35 39 37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/>
-              <circle cx="268" cy="292" r="9" fill="url(#skin)"/>
-            </g>
-
-            <path d="M151 313l-6 28h28l3-28zm58 0 6 28h-28l-3-28z" fill="#153b7c"/>
-          </g>
-
-          <g class="head">
-            <path d="M114 127c4-50 30-84 71-82 41 2 66 34 62 82-2 28-17 54-39 68-16 10-41 10-57 0-22-14-35-40-37-68z" fill="url(#skin)"/>
-            <path d="M119 111c8-45 38-72 76-67 32 4 55 27 58 62-20-16-48-24-86-22-20 1-35 9-48 27z" fill="url(#hair)"/>
-            <path d="M116 118c-8 22-5 48 5 69-25-20-28-63-5-87z" fill="url(#hair)" opacity=".95"/>
-
-            <ellipse cx="150" cy="154" rx="17" ry="12" fill="url(#cheek)"/>
-            <ellipse cx="213" cy="154" rx="17" ry="12" fill="url(#cheek)"/>
-
-            <g class="eye">
-              <circle cx="158" cy="133" r="7" fill="#1d1d1f"/>
-              <circle cx="155" cy="130" r="2" fill="white"/>
-            </g>
-
-            <g class="eye">
-              <circle cx="204" cy="133" r="7" fill="#1d1d1f"/>
-              <circle cx="201" cy="130" r="2" fill="white"/>
-            </g>
-
-            <path d="M147 119c12-7 22-7 31-1M192 118c10-6 21-5 31 2" stroke="#2a160d" stroke-width="5" stroke-linecap="round" fill="none"/>
-            <path d="M181 139c-3 8-5 15-1 21" stroke="#c7794b" stroke-width="4" stroke-linecap="round" fill="none"/>
-
-            <ellipse class="mouth" cx="181" cy="174" rx="18" ry="7" fill="#7b1d1d"/>
-            <path d="M162 178c10 10 29 10 39 0" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".9"/>
-          </g>
-        </svg>
+      <div id="threeWrap">
+        <div id="fallbackFace" class="fallbackFace">👩‍⚕️</div>
       </div>
     </div>
 
@@ -629,9 +399,19 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+    import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+    import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+
+    const AVATAR_ZIPS = [
+      '/uploads_files_4123772_FBX.zip',
+      '/uploads_files_4123772_OBJ.zip'
+    ];
+
     const DEFAULT_INSTRUCTIONS =
-      'Du bist Simons deutscher Voice-Agent. Sprich kurz, klar, nüchtern und trocken-humorig. Keine KI-Floskeln. Keine langen Antworten. Wenn Simon offensichtlich Unsinn sagt, widersprich knapp. Wenn Simon dich unterbricht, hör auf und reagiere auf das Neue.';
+      'Du bist Simons deutscher Voice-Agent. Sprich kurz, klar, nüchtern und trocken-humorig. Sprich mit deutscher Aussprache und deutscher Satzmelodie. Keine englischen Füllwörter. Keine KI-Floskeln. Maximal 1 bis 3 Sätze.';
 
     const $ = (id) => document.getElementById(id);
 
@@ -644,6 +424,8 @@
     const startModal = $('startModal');
     const startBtn = $('startBtn');
     const startError = $('startError');
+    const threeWrap = $('threeWrap');
+    const fallbackFace = $('fallbackFace');
 
     let pc = null;
     let dc = null;
@@ -652,10 +434,33 @@
     let currentAiBubble = null;
     let stopSpeakingTimer = null;
     let connecting = false;
+
     let audioContext = null;
     let analyser = null;
     let analyserRunning = false;
-    let sourceNode = null;
+
+    let scene;
+    let camera;
+    let renderer;
+    let clock;
+    let mixer;
+    let avatarRoot;
+    let loadedAvatar = null;
+    let morphTargets = [];
+    let bones = {
+      head: null,
+      neck: null,
+      spine: null,
+      jaw: null,
+      leftArm: null,
+      rightArm: null
+    };
+    let speakingEnergy = 0;
+
+    initThree();
+    loadAvatar();
+    loadConfig();
+    setTimeout(() => connect().catch(() => startModal.classList.add('show')), 500);
 
     function setStatus(text, mode = '') {
       statusText.textContent = text;
@@ -696,10 +501,344 @@
       clearTimeout(stopSpeakingTimer);
       stopSpeakingTimer = setTimeout(() => {
         root.classList.remove('speaking');
-        document.documentElement.style.setProperty('--mouth-scale', '.35');
+        speakingEnergy = 0;
         document.documentElement.style.setProperty('--voice-lift', '0px');
         document.documentElement.style.setProperty('--voice-glow', '.12');
       }, 1400);
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/app-config.json?v=' + Date.now());
+        if (!res.ok) return;
+
+        const config = await res.json();
+
+        if (config.avatarScale && avatarRoot) {
+          avatarRoot.scale.multiplyScalar(Number(config.avatarScale) || 1);
+        }
+
+        document.body.classList.toggle('dark', config.theme === 'dark');
+      } catch (_) {}
+    }
+
+    function initThree() {
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+      camera.position.set(0, 1.35, 5.2);
+
+      renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: true
+      });
+
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(threeWrap.clientWidth, threeWrap.clientHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      threeWrap.appendChild(renderer.domElement);
+
+      clock = new THREE.Clock();
+
+      avatarRoot = new THREE.Group();
+      scene.add(avatarRoot);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0xbfd4ff, 2.5);
+      scene.add(hemi);
+
+      const key = new THREE.DirectionalLight(0xffffff, 2.4);
+      key.position.set(2.6, 4.2, 4.5);
+      scene.add(key);
+
+      const fill = new THREE.DirectionalLight(0xffffff, 1.1);
+      fill.position.set(-3, 2.5, 2);
+      scene.add(fill);
+
+      window.addEventListener('resize', resizeThree);
+      resizeThree();
+      animateThree();
+    }
+
+    function resizeThree() {
+      const w = threeWrap.clientWidth || 400;
+      const h = threeWrap.clientHeight || 400;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+
+    async function loadAvatar() {
+      setStatus('Lade Avatar...');
+
+      for (const zipUrl of AVATAR_ZIPS) {
+        try {
+          const avatar = await loadAvatarZip(zipUrl);
+          if (avatar) {
+            useAvatar(avatar);
+            setStatus('Avatar geladen');
+            setTimeout(() => setStatus('Verbinde...'), 700);
+            return;
+          }
+        } catch (error) {
+          console.warn('Avatar load failed:', zipUrl, error);
+        }
+      }
+
+      fallbackFace.classList.add('show');
+      setStatus('Avatar-Fallback');
+    }
+
+    function normalizeName(name) {
+      return String(name || '')
+        .replace(/\\/g, '/')
+        .split('/')
+        .pop()
+        .toLowerCase();
+    }
+
+    async function loadAvatarZip(zipUrl) {
+      const res = await fetch(zipUrl + '?v=' + Date.now());
+
+      if (!res.ok) {
+        throw new Error('ZIP nicht gefunden: ' + zipUrl);
+      }
+
+      const buffer = await res.arrayBuffer();
+      const zip = await JSZip.loadAsync(buffer);
+      const files = Object.values(zip.files).filter((file) => !file.dir);
+
+      const blobUrls = new Map();
+
+      for (const file of files) {
+        const lower = file.name.toLowerCase();
+
+        if (/\.(png|jpg|jpeg|webp)$/i.test(lower)) {
+          const blob = await file.async('blob');
+          blobUrls.set(normalizeName(file.name), URL.createObjectURL(blob));
+        }
+      }
+
+      const manager = new THREE.LoadingManager();
+
+      manager.setURLModifier((url) => {
+        const key = normalizeName(url);
+        return blobUrls.get(key) || url;
+      });
+
+      const fbxFile = files.find((file) => file.name.toLowerCase().endsWith('.fbx'));
+
+      if (fbxFile) {
+        const arrayBuffer = await fbxFile.async('arraybuffer');
+        const loader = new FBXLoader(manager);
+        return loader.parse(arrayBuffer, '');
+      }
+
+      const objFile = files.find((file) => file.name.toLowerCase().endsWith('.obj'));
+
+      if (objFile) {
+        const objText = await objFile.async('text');
+        const objLoader = new OBJLoader(manager);
+        const mtlFile = files.find((file) => file.name.toLowerCase().endsWith('.mtl'));
+
+        if (mtlFile) {
+          const mtlText = await mtlFile.async('text');
+          const mtlLoader = new MTLLoader(manager);
+          const materials = mtlLoader.parse(mtlText, '');
+          materials.preload();
+          objLoader.setMaterials(materials);
+        }
+
+        return objLoader.parse(objText);
+      }
+
+      throw new Error('Keine FBX/OBJ-Datei in ZIP gefunden.');
+    }
+
+    function useAvatar(object) {
+      loadedAvatar = object;
+      fallbackFace.classList.remove('show');
+
+      avatarRoot.clear();
+      avatarRoot.add(object);
+
+      object.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((mat) => prepareMaterial(mat));
+            } else {
+              prepareMaterial(child.material);
+            }
+          }
+
+          if (child.morphTargetDictionary && child.morphTargetInfluences) {
+            for (const [name, index] of Object.entries(child.morphTargetDictionary)) {
+              if (/jaw|mouth|open|aa|oh|viseme|vrc|a_|e_|i_|o_|u_/i.test(name)) {
+                morphTargets.push({ mesh: child, index, name });
+              }
+            }
+          }
+        }
+
+        if (child.isBone) {
+          const name = child.name.toLowerCase();
+
+          if (!bones.head && name.includes('head')) bones.head = child;
+          if (!bones.neck && name.includes('neck')) bones.neck = child;
+          if (!bones.spine && (name.includes('spine') || name.includes('chest'))) bones.spine = child;
+          if (!bones.jaw && (name.includes('jaw') || name.includes('mouth'))) bones.jaw = child;
+          if (!bones.leftArm && (name.includes('leftarm') || name.includes('upperarm_l') || name.includes('arm_l'))) bones.leftArm = child;
+          if (!bones.rightArm && (name.includes('rightarm') || name.includes('upperarm_r') || name.includes('arm_r'))) bones.rightArm = child;
+        }
+      });
+
+      fitAvatar(object);
+
+      if (object.animations && object.animations.length) {
+        mixer = new THREE.AnimationMixer(object);
+        const idleClip = object.animations[0];
+        mixer.clipAction(idleClip).play();
+      }
+    }
+
+    function prepareMaterial(mat) {
+      mat.side = THREE.DoubleSide;
+
+      if ('roughness' in mat) mat.roughness = 0.58;
+      if ('metalness' in mat) mat.metalness = 0.05;
+
+      mat.needsUpdate = true;
+    }
+
+    function fitAvatar(object) {
+      const box = new THREE.Box3().setFromObject(object);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const scale = 2.65 / maxDim;
+
+      object.scale.setScalar(scale);
+
+      const scaledBox = new THREE.Box3().setFromObject(object);
+      const center = new THREE.Vector3();
+      scaledBox.getCenter(center);
+
+      object.position.x -= center.x;
+      object.position.z -= center.z;
+      object.position.y -= scaledBox.min.y;
+      object.position.y -= 1.35;
+
+      avatarRoot.rotation.y = 0;
+    }
+
+    function animateThree() {
+      requestAnimationFrame(animateThree);
+
+      const delta = clock.getDelta();
+      const t = clock.elapsedTime;
+
+      if (mixer) {
+        mixer.update(delta);
+      }
+
+      const idle = Math.sin(t * 1.35) * 0.035;
+      const talk = speakingEnergy;
+
+      avatarRoot.position.y = idle + talk * 0.06;
+      avatarRoot.rotation.y = Math.sin(t * 0.65) * 0.045 + talk * 0.045;
+      avatarRoot.rotation.x = Math.sin(t * 0.55) * 0.015;
+
+      if (bones.head) {
+        bones.head.rotation.y = Math.sin(t * 0.8) * 0.08 + talk * 0.08;
+        bones.head.rotation.x = Math.sin(t * 0.7) * 0.035 - talk * 0.05;
+      }
+
+      if (bones.neck) {
+        bones.neck.rotation.y = Math.sin(t * 0.6) * 0.04;
+      }
+
+      if (bones.spine) {
+        bones.spine.rotation.z = Math.sin(t * 0.55) * 0.025;
+      }
+
+      if (bones.jaw) {
+        bones.jaw.rotation.x = talk * 0.32;
+      }
+
+      if (bones.leftArm) {
+        bones.leftArm.rotation.z = Math.sin(t * 1.2) * 0.04 + talk * 0.12;
+      }
+
+      if (bones.rightArm) {
+        bones.rightArm.rotation.z = Math.sin(t * 1.1) * -0.04 - talk * 0.12;
+      }
+
+      for (const target of morphTargets) {
+        target.mesh.morphTargetInfluences[target.index] = Math.min(1, talk * 1.15);
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function startAudioAnalyser(stream) {
+      if (analyserRunning) return;
+
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+        if (!AudioContextClass) return;
+
+        audioContext = audioContext || new AudioContextClass();
+
+        if (audioContext.state === 'suspended') {
+          audioContext.resume().catch(() => {});
+        }
+
+        const source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.78;
+        source.connect(analyser);
+
+        const data = new Uint8Array(analyser.fftSize);
+        analyserRunning = true;
+
+        function loop() {
+          if (!analyserRunning || !analyser) return;
+
+          analyser.getByteTimeDomainData(data);
+
+          let sum = 0;
+
+          for (let i = 0; i < data.length; i++) {
+            const value = (data[i] - 128) / 128;
+            sum += value * value;
+          }
+
+          const rms = Math.sqrt(sum / data.length);
+          const energy = Math.min(1, Math.max(0, (rms - 0.012) * 7));
+
+          speakingEnergy = energy;
+
+          const lift = -energy * 7;
+          const glow = 0.12 + energy * 0.22;
+
+          document.documentElement.style.setProperty('--voice-lift', `${lift.toFixed(1)}px`);
+          document.documentElement.style.setProperty('--voice-glow', glow.toFixed(2));
+
+          if (energy > 0.07) {
+            root.classList.add('speaking');
+          }
+
+          requestAnimationFrame(loop);
+        }
+
+        loop();
+      } catch (_) {}
     }
 
     async function fetchWithTimeout(url, options = {}, ms = 25000) {
@@ -714,83 +853,6 @@
       } finally {
         clearTimeout(timeout);
       }
-    }
-
-    function fail(message) {
-      setStatus('Start fehlgeschlagen', 'bad');
-      showError(message);
-      startModal.classList.add('show');
-      connecting = false;
-      disconnect(false);
-    }
-
-    async function loadConfig() {
-      try {
-        const res = await fetch('/app-config.json?v=' + Date.now());
-        if (!res.ok) return;
-
-        const config = await res.json();
-
-        if (config.avatarScale) {
-          document.documentElement.style.setProperty('--avatar-scale', String(config.avatarScale));
-        }
-
-        document.body.classList.toggle('dark', config.theme === 'dark');
-      } catch (_) {}
-    }
-
-    function startAudioAnalyser(stream) {
-      if (analyserRunning) return;
-
-      try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContextClass) return;
-
-        audioContext = audioContext || new AudioContextClass();
-
-        if (audioContext.state === 'suspended') {
-          audioContext.resume().catch(() => {});
-        }
-
-        sourceNode = audioContext.createMediaStreamSource(stream);
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.78;
-        sourceNode.connect(analyser);
-
-        const data = new Uint8Array(analyser.fftSize);
-        analyserRunning = true;
-
-        function loop() {
-          if (!analyserRunning || !analyser) return;
-
-          analyser.getByteTimeDomainData(data);
-
-          let sum = 0;
-          for (let i = 0; i < data.length; i++) {
-            const value = (data[i] - 128) / 128;
-            sum += value * value;
-          }
-
-          const rms = Math.sqrt(sum / data.length);
-          const energy = Math.min(1, Math.max(0, (rms - 0.012) * 7));
-          const mouth = Math.max(.35, 0.35 + energy * 2);
-          const lift = -energy * 7;
-          const glow = 0.12 + energy * 0.22;
-
-          document.documentElement.style.setProperty('--mouth-scale', mouth.toFixed(2));
-          document.documentElement.style.setProperty('--voice-lift', `${lift.toFixed(1)}px`);
-          document.documentElement.style.setProperty('--voice-glow', glow.toFixed(2));
-
-          if (energy > 0.07) {
-            root.classList.add('speaking');
-          }
-
-          requestAnimationFrame(loop);
-        }
-
-        loop();
-      } catch (_) {}
     }
 
     async function connect() {
@@ -823,7 +885,7 @@
           },
           body: JSON.stringify({
             instructions: DEFAULT_INSTRUCTIONS,
-            voice: 'shimmer'
+            voice: 'coral'
           })
         }, 20000);
 
@@ -948,11 +1010,23 @@
       pc = null;
       analyserRunning = false;
       analyser = null;
-      sourceNode = null;
 
       root.classList.remove('speaking');
 
       if (show) startModal.classList.add('show');
+    }
+
+    function fail(message) {
+      setStatus('Start fehlgeschlagen', 'bad');
+      showError(message);
+      startModal.classList.add('show');
+      connecting = false;
+      disconnect(false);
+    }
+
+    function showError(text) {
+      startError.textContent = text || '';
+      startError.classList.toggle('show', Boolean(text));
     }
 
     function handleRealtime(raw) {
@@ -966,11 +1040,7 @@
 
       const type = msg.type || '';
 
-      if (type === 'response.created') {
-        speak();
-      }
-
-      if (type === 'response.audio.delta') {
+      if (type === 'response.created' || type === 'response.audio.delta') {
         speak();
       }
 
@@ -1045,14 +1115,41 @@
       if (delta > 55) openChat(true);
     }, { passive: true });
 
-    loadConfig();
-    setStatus('Verbinde...');
+    function openChat(open) {
+      chatSheet.classList.toggle('open', open);
+    }
 
-    setTimeout(() => {
-      connect().catch(() => {
-        startModal.classList.add('show');
-      });
-    }, 350);
+    function bubble(role, text) {
+      const el = document.createElement('div');
+      el.className = `bubble ${role}`;
+      el.textContent = text;
+      chatLog.appendChild(el);
+      chatLog.scrollTop = chatLog.scrollHeight;
+      return el;
+    }
+
+    function aiDelta(text) {
+      if (!currentAiBubble) currentAiBubble = bubble('ai', '');
+      currentAiBubble.textContent += text;
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function speak() {
+      clearTimeout(stopSpeakingTimer);
+      root.classList.add('speaking');
+    }
+
+    function stopSoon() {
+      clearTimeout(stopSpeakingTimer);
+      stopSpeakingTimer = setTimeout(() => {
+        root.classList.remove('speaking');
+        speakingEnergy = 0;
+        document.documentElement.style.setProperty('--voice-lift', '0px');
+        document.documentElement.style.setProperty('--voice-glow', '.12');
+      }, 1400);
+    }
+
+    loadConfig();
   </script>
 </body>
 </html>
