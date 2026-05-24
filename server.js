@@ -14,7 +14,7 @@ const upload = multer({
 
 const PORT = process.env.PORT || 8080;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime';
+const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO || 'Simon-Engelmann/engelmann-voice-agent';
 const ADMIN_PIN = process.env.ADMIN_PIN;
@@ -26,38 +26,54 @@ app.get('/healthz', (_req, res) => {
   res.status(200).json({ ok: true });
 });
 
+function getRealtimeModel() {
+  if (!REALTIME_MODEL || REALTIME_MODEL === 'gpt-realtime') {
+    return 'gpt-realtime-2';
+  }
+  return REALTIME_MODEL;
+}
+
 app.post('/session', async (req, res) => {
   if (!OPENAI_API_KEY) {
     return res.status(500).json({ error: 'OPENAI_API_KEY missing on server.' });
   }
 
-  const body = {
-    model: REALTIME_MODEL,
-    voice: req.body?.voice || 'alloy',
-    modalities: ['text', 'audio'],
+  const session = {
+    type: 'realtime',
+    model: getRealtimeModel(),
     instructions:
       req.body?.instructions ||
-      'Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, ausser der Nutzer wuenscht eine andere Sprache. Antworte natuerlich, klar und knapp.'
+      'Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, ausser der Nutzer wuenscht eine andere Sprache. Antworte natuerlich, klar und knapp.',
+    audio: {
+      output: {
+        voice: req.body?.voice || 'marin'
+      }
+    }
   };
 
   try {
-    const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
+    const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'OpenAI-Safety-Identifier': 'engelmann-voice-agent'
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify({ session })
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       return res.status(response.status).json(data);
     }
 
-    return res.json(data);
+    return res.json({
+      ...data,
+      client_secret: { value: data.value },
+      model: session.model
+    });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to create realtime session', details: String(error) });
+    return res.status(500).json({ error: 'Failed to create realtime client secret', details: String(error) });
   }
 });
 
