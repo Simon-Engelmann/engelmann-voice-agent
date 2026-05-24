@@ -176,7 +176,191 @@ app.post('/change-request', async (req, res) => {
   }
 });
 
-app.post('/upload', upload.single('file'), (req, res) => {
+app.post('/upload', upload.single('file'), (req, res) => {function githubHeaders() {
+  return {
+    Authorization: `Bearer ${GITHUB_TOKEN}`,
+    Accept: 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'engelmann-voice-agent'
+  };
+}
+
+async function githubJson(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...githubHeaders(),
+      ...(options.headers || {})
+    }
+  });
+
+  const text = await response.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    const error = new Error(`GitHub API failed: ${response.status}`);
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
+
+  return data;
+}
+
+function parseConfigChange(command, currentConfig) {
+  const text = cleanText(command, 2000).toLowerCase();
+  const nextConfig = { ...currentConfig };
+  const changes = [];
+
+  const percentMatch = text.match(/(\d+)\s*(prozent|%)/);
+  const percent = percentMatch ? Number(percentMatch[1]) / 100 : null;
+
+  if (text.includes('avatar')) {
+    if (text.includes('größer') || text.includes('groesser') || text.includes('grösser')) {
+      const factor = 1 + (percent || 0.15);
+      nextConfig.avatarScale = Number(((Number(nextConfig.avatarScale) || 1) * factor).toFixed(2));
+      changes.push(`Avatar auf ${nextConfig.avatarScale} skaliert`);
+    }
+
+    if (text.includes('kleiner')) {
+      const factor = 1 - (percent || 0.15);
+      nextConfig.avatarScale = Number(Math.max(0.5, ((Number(nextConfig.avatarScale) || 1) * factor)).toFixed(2));
+      changes.push(`Avatar auf ${nextConfig.avatarScale} skaliert`);
+    }
+  }
+
+  if (text.includes('chat') || text.includes('eingabe') || text.includes('textfeld')) {
+    if (text.includes('anzeigen') || text.includes('einblenden') || text.includes('zeigen')) {
+      nextConfig.showChatInput = true;
+      changes.push('Chat-Eingabe aktiviert');
+    }
+
+    if (text.includes('ausblenden') || text.includes('entfernen') || text.includes('verstecken') || text.includes('keine buttons')) {
+      nextConfig.showChatInput = false;
+      changes.push('Chat-Eingabe deaktiviert');
+    }
+  }
+
+  if (text.includes('dunkel') || text.includes('dark')) {
+    nextConfig.theme = 'dark';
+    changes.push('Theme auf dark gesetzt');
+  }
+
+  if (text.includes('hell') || text.includes('light')) {
+    nextConfig.theme = 'light';
+    changes.push('Theme auf light gesetzt');
+  }
+
+  return {
+    nextConfig,
+    changes
+  };
+}
+
+app.post('/admin/apply-config-change', async (req, res) => {
+  const { adminPin, command } = req.body || {};
+
+  if (!ADMIN_PIN) {
+    return res.status(500).json({ error: 'ADMIN_PIN missing on server.' });
+  }
+
+  if (!GITHUB_TOKEN || !GITHUB_REPO) {
+    return res.status(500).json({ error: 'GITHUB_TOKEN or GITHUB_REPO missing on server.' });
+  }
+
+  if (String(adminPin || '') !== String(ADMIN_PIN)) {
+    return res.status(401).json({ error: 'Invalid admin PIN.' });
+  }
+
+  if (!cleanText(command)) {
+    return res.status(400).json({ error: 'command required.' });
+  }
+
+  try {
+    const repoApi = `https://api.github.com/repos/${GITHUB_REPO}`;
+    const repo = await githubJson(repoApi);
+    const baseBranch = repo.default_branch || 'main';
+
+    const baseRef = await githubJson(`${repoApi}/git/ref/heads/${baseBranch}`);
+    const baseSha = baseRef.object.sha;
+
+    const branchName = `voice-config-${Date.now()}`;
+    await githubJson(`${repoApi}/git/refs`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ref: `refs/heads/${branchName}`,
+        sha: baseSha
+      })
+    });
+
+    const configPath = 'public/app-config.json';
+    const file = await githubJson(`${repoApi}/contents/${configPath}?ref=${baseBranch}`);
+    const currentConfig = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
+
+    const { nextConfig, changes } = parseConfigChange(command, currentConfig);
+
+    if (!changes.length || JSON.stringify(currentConfig) === JSON.stringify(nextConfig)) {
+      return res.status(400).json({
+        error: 'No supported config change detected.',
+        supportedExamples: [
+          'Mach den Avatar 20 Prozent größer',
+          'Mach den Avatar kleiner',
+          'Blende das Chat-Textfeld aus',
+          'Stelle das Theme auf hell'
+        ]
+      });
+    }
+
+    const content = Buffer.from(JSON.stringify(nextConfig, null, 2) + '\n', 'utf8').toString('base64');
+
+    await githubJson(`${repoApi}/contents/${configPath}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        message: `Apply voice config change: ${changes.join(', ')}`,
+        content,
+        sha: file.sha,
+        branch: branchName
+      })
+    });
+
+    const pr = await githubJson(`${repoApi}/pulls`, {
+      method: 'POST',
+      body: JSON.stringify({
+        title: `Voice config change: ${changes.join(', ')}`,
+        head: branchName,
+        base: baseBranch,
+        body: [
+          '## Voice Config Change',
+          '',
+          `Command: ${command}`,
+          '',
+          'Changes:',
+          ...changes.map((change) => `- ${change}`)
+        ].join('\n')
+      })
+    });
+
+    return res.json({
+      ok: true,
+      pullRequestUrl: pr.html_url,
+      pullRequestNumber: pr.number,
+      branch: branchName,
+      config: nextConfig,
+      changes
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: 'Failed to apply config change.',
+      details: error.data || String(error)
+    });
+  }
+});
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
