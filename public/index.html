@@ -72,8 +72,12 @@
     }
 
     @keyframes aurora {
-      from { transform: translate3d(-1%, -1%, 0) scale(1); }
-      to { transform: translate3d(1.5%, 1%, 0) scale(1.04); }
+      from {
+        transform: translate3d(-1%, -1%, 0) scale(1);
+      }
+      to {
+        transform: translate3d(1.5%, 1%, 0) scale(1.04);
+      }
     }
 
     .top {
@@ -123,33 +127,6 @@
       box-shadow: 0 0 0 6px rgba(255,59,48,.12);
     }
 
-    .admin-pill {
-      display: none;
-      width: auto;
-      min-height: 34px;
-      border: 0;
-      padding: 7px 13px;
-      border-radius: 999px;
-      color: white;
-      background: linear-gradient(135deg, #111 0%, #3b3b40 100%);
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      box-shadow: 0 10px 30px rgba(0,0,0,.12);
-    }
-
-    .admin .admin-pill {
-      display: flex;
-    }
-
-    .admin-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 0 5px rgba(52,199,89,.18);
-    }
-
     .stage {
       position: relative;
       display: grid;
@@ -179,8 +156,14 @@
     }
 
     @keyframes halo {
-      0%,100% { transform: scale(1); opacity: .92; }
-      50% { transform: scale(1.04); opacity: 1; }
+      0%,100% {
+        transform: scale(1);
+        opacity: .92;
+      }
+      50% {
+        transform: scale(1.04);
+        opacity: 1;
+      }
     }
 
     .avatar-box {
@@ -247,53 +230,93 @@
     }
 
     @keyframes blink {
-      0%, 92%, 100% { transform: scaleY(1); }
-      94%, 96% { transform: scaleY(.12); }
+      0%, 92%, 100% {
+        transform: scaleY(1);
+      }
+      94%, 96% {
+        transform: scaleY(.12);
+      }
     }
 
     @keyframes float {
-      0%,100% { transform: translateY(0); }
-      50% { transform: translateY(-10px); }
+      0%,100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-10px);
+      }
     }
 
     @keyframes breathe {
-      0%,100% { transform: scale(1); }
-      50% { transform: scale(1.018); }
+      0%,100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.018);
+      }
     }
 
     @keyframes headIdle {
-      0%,100% { transform: rotate(-1deg); }
-      50% { transform: rotate(1.2deg); }
+      0%,100% {
+        transform: rotate(-1deg);
+      }
+      50% {
+        transform: rotate(1.2deg);
+      }
     }
 
     @keyframes speakBody {
-      from { transform: translateY(0) scale(1); }
-      to { transform: translateY(-6px) scale(1.022); }
+      from {
+        transform: translateY(0) scale(1);
+      }
+      to {
+        transform: translateY(-6px) scale(1.022);
+      }
     }
 
     @keyframes headTalk {
-      from { transform: rotate(-2.4deg) translateY(0); }
-      to { transform: rotate(2.4deg) translateY(-3px); }
+      from {
+        transform: rotate(-2.4deg) translateY(0);
+      }
+      to {
+        transform: rotate(2.4deg) translateY(-3px);
+      }
     }
 
     @keyframes armLeftIdle {
-      0%,100% { transform: rotate(0deg); }
-      50% { transform: rotate(2deg); }
+      0%,100% {
+        transform: rotate(0deg);
+      }
+      50% {
+        transform: rotate(2deg);
+      }
     }
 
     @keyframes armRightIdle {
-      0%,100% { transform: rotate(0deg); }
-      50% { transform: rotate(-2deg); }
+      0%,100% {
+        transform: rotate(0deg);
+      }
+      50% {
+        transform: rotate(-2deg);
+      }
     }
 
     @keyframes armLeftTalk {
-      from { transform: rotate(-4deg); }
-      to { transform: rotate(8deg); }
+      from {
+        transform: rotate(-4deg);
+      }
+      to {
+        transform: rotate(8deg);
+      }
     }
 
     @keyframes armRightTalk {
-      from { transform: rotate(4deg); }
-      to { transform: rotate(-8deg); }
+      from {
+        transform: rotate(4deg);
+      }
+      to {
+        transform: rotate(-8deg);
+      }
     }
 
     .hint {
@@ -471,44 +494,17 @@
       line-height: 1.38;
     }
 
-    button,
-    input {
+    button {
       width: 100%;
       min-height: 50px;
       border: 0;
       border-radius: 16px;
       padding: 12px 14px;
       font: inherit;
-    }
-
-    button {
       background: var(--blue);
       color: #fff;
       font-weight: 700;
       cursor: pointer;
-    }
-
-    button.ghost {
-      background: #f2f2f7;
-      color: var(--text);
-      margin-top: 8px;
-    }
-
-    body.dark button.ghost {
-      background: #2c2c2e;
-    }
-
-    input {
-      background: #f5f5f7;
-      border: 1px solid var(--line);
-      font-size: 22px;
-      text-align: center;
-      letter-spacing: 8px;
-      color: var(--text);
-    }
-
-    body.dark input {
-      background: #1c1c1e;
     }
 
     .error {
@@ -538,11 +534,6 @@
         <span class="dot"></span>
         <span id="statusText">Verbinde...</span>
       </div>
-
-      <button id="adminPill" class="pill admin-pill" type="button">
-        <span class="admin-dot"></span>
-        Admin aktiv
-      </button>
     </div>
 
     <div class="stage">
@@ -592,7 +583,6 @@
 
           <g class="head">
             <path d="M114 127c4-50 30-84 71-82 41 2 66 34 62 82-2 28-17 54-39 68-16 10-41 10-57 0-22-14-35-40-37-68z" fill="url(#skin)"/>
-
             <path d="M119 111c8-45 38-72 76-67 32 4 55 27 58 62-20-16-48-24-86-22-20 1-35 9-48 27z" fill="url(#hair)"/>
             <path d="M116 118c-8 22-5 48 5 69-25-20-28-63-5-87z" fill="url(#hair)" opacity=".95"/>
 
@@ -639,53 +629,33 @@
     </div>
   </div>
 
-  <div id="pinModal" class="modal">
-    <div class="card">
-      <h1>Admin-Modus</h1>
-      <p>PIN eingeben, um App-Änderungen per Sprache zu erlauben.</p>
-      <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="••••" />
-      <button id="pinConfirm" type="button">Bestätigen</button>
-      <button id="pinCancel" class="ghost" type="button">Abbrechen</button>
-      <div id="pinError" class="error"></div>
-    </div>
-  </div>
-
   <script>
     const DEFAULT_INSTRUCTIONS =
-      'Du bist Simons deutscher Voice-Agent. Sprich kurz, klar, nüchtern und trocken-humorig. Keine KI-Floskeln. Keine langen Antworten. Wenn Simon offensichtlich Unsinn sagt, widersprich knapp. Wenn Simon dich unterbricht, hör sofort auf. Wenn Simon "Frosch Frosch" sagt, bestätige nur: "Admin-Modus. PIN bitte."';
+      'Du bist Simons deutscher Voice-Agent. Sprich kurz, klar, nüchtern und trocken-humorig. Keine KI-Floskeln. Keine langen Antworten. Wenn Simon offensichtlich Unsinn sagt, widersprich knapp. Wenn Simon dich unterbricht, hör auf und reagiere auf das Neue.';
 
     const $ = (id) => document.getElementById(id);
 
     const root = $('root');
     const statusPill = $('statusPill');
     const statusText = $('statusText');
-    const adminPill = $('adminPill');
     const chatSheet = $('chatSheet');
     const chatHandle = $('chatHandle');
     const chatLog = $('chatLog');
     const startModal = $('startModal');
     const startBtn = $('startBtn');
     const startError = $('startError');
-    const pinModal = $('pinModal');
-    const pinInput = $('pinInput');
-    const pinConfirm = $('pinConfirm');
-    const pinCancel = $('pinCancel');
-    const pinError = $('pinError');
 
     let pc = null;
     let dc = null;
     let remoteAudio = null;
     let dragStartY = 0;
-    let lastUserTranscript = '';
     let currentAiBubble = null;
     let stopSpeakingTimer = null;
     let connecting = false;
-    let adminMode = false;
-    let adminPin = '';
-    let pendingAdminTranscript = '';
     let audioContext = null;
     let analyser = null;
     let analyserRunning = false;
+    let sourceNode = null;
 
     function setStatus(text, mode = '') {
       statusText.textContent = text;
@@ -693,9 +663,9 @@
       statusPill.classList.toggle('bad', mode === 'bad');
     }
 
-    function showError(el, text) {
-      el.textContent = text || '';
-      el.classList.toggle('show', Boolean(text));
+    function showError(text) {
+      startError.textContent = text || '';
+      startError.classList.toggle('show', Boolean(text));
     }
 
     function openChat(open) {
@@ -729,30 +699,7 @@
         document.documentElement.style.setProperty('--mouth-scale', '.35');
         document.documentElement.style.setProperty('--voice-lift', '0px');
         document.documentElement.style.setProperty('--voice-glow', '.12');
-      }, 1200);
-    }
-
-    function setAdmin(on) {
-      adminMode = on;
-      root.classList.toggle('admin', on);
-      setStatus(on ? 'Admin aktiv' : 'Sprich jetzt', 'ok');
-      bubble('system', on ? 'Admin-Modus aktiv. Sag deine Änderung.' : 'Admin-Modus beendet.');
-    }
-
-    function hasTrigger(text) {
-      return String(text || '')
-        .toLowerCase()
-        .replace(/[.,!?]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .includes('frosch frosch');
-    }
-
-    function cleanTrigger(text) {
-      return String(text || '').replace(/frosch frosch/ig, '').trim();
-    }
-
-    function looksLikeChange(text) {
-      return /(mach|ändere|aendere|entferne|baue|füge|fuege|stelle|design|avatar|app|button|farbe|größe|groesse|chat|layout|hintergrund|kleiner|größer|groesser)/i.test(String(text || ''));
+      }, 1400);
     }
 
     async function fetchWithTimeout(url, options = {}, ms = 25000) {
@@ -760,7 +707,10 @@
       const timeout = setTimeout(() => controller.abort(), ms);
 
       try {
-        return await fetch(url, { ...options, signal: controller.signal });
+        return await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
       } finally {
         clearTimeout(timeout);
       }
@@ -768,7 +718,7 @@
 
     function fail(message) {
       setStatus('Start fehlgeschlagen', 'bad');
-      showError(startError, message);
+      showError(message);
       startModal.classList.add('show');
       connecting = false;
       disconnect(false);
@@ -802,11 +752,11 @@
           audioContext.resume().catch(() => {});
         }
 
-        const source = audioContext.createMediaStreamSource(stream);
+        sourceNode = audioContext.createMediaStreamSource(stream);
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.68;
-        source.connect(analyser);
+        analyser.smoothingTimeConstant = 0.78;
+        sourceNode.connect(analyser);
 
         const data = new Uint8Array(analyser.fftSize);
         analyserRunning = true;
@@ -823,16 +773,16 @@
           }
 
           const rms = Math.sqrt(sum / data.length);
-          const energy = Math.min(1, Math.max(0, (rms - 0.015) * 8));
-          const mouth = Math.max(.35, 0.35 + energy * 2.25);
-          const lift = -energy * 8;
-          const glow = 0.12 + energy * 0.24;
+          const energy = Math.min(1, Math.max(0, (rms - 0.012) * 7));
+          const mouth = Math.max(.35, 0.35 + energy * 2);
+          const lift = -energy * 7;
+          const glow = 0.12 + energy * 0.22;
 
           document.documentElement.style.setProperty('--mouth-scale', mouth.toFixed(2));
           document.documentElement.style.setProperty('--voice-lift', `${lift.toFixed(1)}px`);
           document.documentElement.style.setProperty('--voice-glow', glow.toFixed(2));
 
-          if (energy > 0.08) {
+          if (energy > 0.07) {
             root.classList.add('speaking');
           }
 
@@ -847,7 +797,7 @@
       if (connecting || dc?.readyState === 'open') return;
 
       connecting = true;
-      showError(startError, '');
+      showError('');
       startModal.classList.remove('show');
       setStatus('Verbinde...');
 
@@ -868,7 +818,9 @@
 
         const tokenResp = await fetchWithTimeout('/session', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({
             instructions: DEFAULT_INSTRUCTIONS,
             voice: 'shimmer'
@@ -907,7 +859,11 @@
 
         pc.onconnectionstatechange = () => {
           if (pc.connectionState === 'connected') {
-            setStatus(adminMode ? 'Admin aktiv' : 'Sprich jetzt', 'ok');
+            setStatus('Sprich jetzt', 'ok');
+          }
+
+          if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+            setStatus('Verbindung weg', 'bad');
           }
         };
 
@@ -916,15 +872,15 @@
         dc = pc.createDataChannel('oai-events');
 
         dc.onopen = () => {
-          setStatus(adminMode ? 'Admin aktiv' : 'Sprich jetzt', 'ok');
-          bubble('system', 'Bereit. Sag „Frosch Frosch“ für Admin-Modus.');
+          setStatus('Sprich jetzt', 'ok');
+          bubble('system', 'Bereit.');
 
           const greetings = [
-            'Begrüße Simon jetzt kurz und locker. Sag sinngemäß: Moin Simon. Ich bin wach. Mehr kann man morgens kaum verlangen.',
-            'Begrüße Simon jetzt kurz und trocken. Sag sinngemäß: Hi Simon. Bereit, Dinge zu reparieren, die gestern noch gute Ideen waren.',
-            'Begrüße Simon jetzt kurz und fresh. Sag sinngemäß: Simon, da bist du ja. Ich habe schon so getan, als wäre ich produktiv.',
-            'Begrüße Simon jetzt kurz und nüchtern-humorig. Sag sinngemäß: Moin Simon. Lass uns was Sinnvolles tun. Rein statistisch muss es ja irgendwann klappen.',
-            'Begrüße Simon jetzt kurz und freundlich. Sag sinngemäß: Hi Simon. System läuft, Laune stabil, Rest verhandeln wir.'
+            'Begrüße Simon kurz: Moin Simon. Ich bin wach. Mehr kann man technisch kaum verlangen.',
+            'Begrüße Simon kurz: Hi Simon. System läuft, Laune stabil, Rest verhandeln wir.',
+            'Begrüße Simon kurz: Simon, da bist du ja. Ich habe schon mal so getan, als wäre ich produktiv.',
+            'Begrüße Simon kurz: Moin Simon. Lass uns was Sinnvolles tun. Rein statistisch muss es ja irgendwann klappen.',
+            'Begrüße Simon kurz: Hi Simon. Bereit. Ich habe sogar so getan, als hätte ich Kaffee bekommen.'
           ];
 
           const greeting = greetings[Math.floor(Math.random() * greetings.length)];
@@ -938,7 +894,7 @@
                 }
               }));
             } catch (_) {}
-          }, 350);
+          }, 500);
         };
 
         dc.onerror = () => setStatus('DataChannel-Fehler', 'bad');
@@ -992,6 +948,7 @@
       pc = null;
       analyserRunning = false;
       analyser = null;
+      sourceNode = null;
 
       root.classList.remove('speaking');
 
@@ -1009,28 +966,30 @@
 
       const type = msg.type || '';
 
-      if (type.startsWith('response.')) speak();
-
-      if (
-        type === 'response.audio.delta' ||
-        type === 'response.audio_transcript.delta' ||
-        type === 'response.created'
-      ) {
+      if (type === 'response.created') {
         speak();
       }
 
-      if (
-        (type === 'response.audio_transcript.delta' ||
-         type === 'response.output_text.delta') &&
-        msg.delta
-      ) {
+      if (type === 'response.audio.delta') {
+        speak();
+      }
+
+      if (type === 'response.audio.done') {
+        stopSoon();
+      }
+
+      if (type === 'response.audio_transcript.delta' && msg.delta) {
+        aiDelta(msg.delta);
+      }
+
+      if (type === 'response.output_text.delta' && msg.delta) {
         aiDelta(msg.delta);
       }
 
       if (
         type === 'response.audio_transcript.done' ||
-        type === 'response.done' ||
-        type === 'response.output_text.done'
+        type === 'response.output_text.done' ||
+        type === 'response.done'
       ) {
         currentAiBubble = null;
         stopSoon();
@@ -1040,123 +999,11 @@
         type === 'conversation.item.input_audio_transcription.completed' &&
         msg.transcript
       ) {
-        handleUserTranscript(msg.transcript);
+        bubble('me', msg.transcript);
       }
 
       if (type === 'error') {
         bubble('system', msg.error?.message || JSON.stringify(msg));
-      }
-    }
-
-    function handleUserTranscript(text) {
-      lastUserTranscript = text;
-      bubble('me', text);
-
-      if (hasTrigger(text)) {
-        pendingAdminTranscript = cleanTrigger(text);
-        openPin();
-        return;
-      }
-
-      if (adminMode) {
-        if (/admin.*(aus|beenden)|beenden|fertig/i.test(text)) {
-          setAdmin(false);
-          return;
-        }
-
-        if (looksLikeChange(text)) {
-          createConfigChange(text);
-        }
-      }
-    }
-
-    function openPin() {
-      pinInput.value = '';
-      showError(pinError, '');
-      pinModal.classList.add('show');
-      setStatus('PIN erforderlich');
-      setTimeout(() => pinInput.focus(), 150);
-      bubble('system', 'Admin-Modus. Bitte PIN eingeben.');
-    }
-
-    function closePin() {
-      pinModal.classList.remove('show');
-    }
-
-    async function confirmPin() {
-      const pin = pinInput.value.trim();
-
-      if (!pin) {
-        showError(pinError, 'PIN eingeben.');
-        return;
-      }
-
-      pinConfirm.disabled = true;
-      showError(pinError, 'Prüfe PIN...');
-
-      try {
-        const res = await fetch('/admin/apply-config-change', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            adminPin: pin,
-            command: ''
-          })
-        });
-
-        if (res.status === 401) {
-          showError(pinError, 'PIN falsch.');
-          return;
-        }
-
-        if (res.status !== 400) {
-          const text = await res.text();
-          showError(pinError, text || 'PIN konnte nicht geprüft werden.');
-          return;
-        }
-
-        adminPin = pin;
-        closePin();
-        setAdmin(true);
-
-        if (pendingAdminTranscript && looksLikeChange(pendingAdminTranscript)) {
-          createConfigChange(pendingAdminTranscript);
-          pendingAdminTranscript = '';
-        }
-      } catch (error) {
-        showError(pinError, String(error.message || error));
-      } finally {
-        pinConfirm.disabled = false;
-      }
-    }
-
-    async function createConfigChange(command) {
-      if (!adminPin) {
-        openPin();
-        return;
-      }
-
-      bubble('system', 'Erstelle GitHub-PR...');
-
-      try {
-        const res = await fetch('/admin/apply-config-change', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            adminPin,
-            command
-          })
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          throw new Error(data.error || JSON.stringify(data));
-        }
-
-        bubble('ai', 'PR erstellt: ' + data.pullRequestUrl);
-      } catch (error) {
-        bubble('system', 'PR fehlgeschlagen: ' + error.message);
       }
     }
 
@@ -1173,17 +1020,6 @@
     startBtn.addEventListener('touchend', startTap, { passive: false });
     startBtn.addEventListener('pointerup', startTap);
 
-    pinConfirm.addEventListener('click', confirmPin);
-    pinCancel.addEventListener('click', closePin);
-
-    pinInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') confirmPin();
-    });
-
-    adminPill.addEventListener('click', () => {
-      setAdmin(false);
-    });
-
     chatHandle.addEventListener('click', () => {
       openChat(!chatSheet.classList.contains('open'));
     });
@@ -1194,6 +1030,7 @@
 
     chatSheet.addEventListener('touchend', (event) => {
       const delta = dragStartY - event.changedTouches[0].clientY;
+
       if (delta > 30) openChat(true);
       if (delta < -30) openChat(false);
     }, { passive: true });
@@ -1204,6 +1041,7 @@
 
     document.body.addEventListener('touchend', (event) => {
       const delta = dragStartY - event.changedTouches[0].clientY;
+
       if (delta > 55) openChat(true);
     }, { passive: true });
 
