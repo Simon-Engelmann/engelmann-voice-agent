@@ -4,44 +4,1023 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Engelmann Voice Agent</title>
+
   <style>
-    :root{--bg:#fbfbfd;--text:#1d1d1f;--muted:#6e6e73;--line:rgba(0,0,0,.09);--blue:#007aff;--green:#34c759;--red:#ff3b30}
-    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent} html,body{margin:0;min-height:100%;overflow:hidden}
-    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;background:radial-gradient(circle at 50% 44%,#f0f6ff 0,#fff 38%,var(--bg) 100%);color:var(--text)}
-    .app{min-height:100dvh;display:grid;place-items:center;padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));position:relative}
-    .status{position:fixed;top:max(14px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:8px;max-width:calc(100vw - 28px);min-height:34px;padding:7px 13px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.82);backdrop-filter:blur(18px);box-shadow:0 8px 24px rgba(0,0,0,.05);font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .dot{width:8px;height:8px;border-radius:99px;background:#c7c7cc;flex:0 0 auto}.ok .dot{background:var(--green);box-shadow:0 0 0 6px rgba(52,199,89,.12)}.bad .dot{background:var(--red);box-shadow:0 0 0 6px rgba(255,59,48,.12)}
-    .avatar-box{width:min(72vw,360px);height:min(72vw,360px);display:grid;place-items:center;filter:drop-shadow(0 35px 38px rgba(37,70,120,.15));animation:float 4.8s ease-in-out infinite}.speaking .avatar-box{animation:speakBody .58s ease-in-out infinite alternate}
-    svg{width:100%;height:100%}.head{animation:head 5.8s ease-in-out infinite;transform-origin:50% 42%}.body{animation:breathe 3.2s ease-in-out infinite;transform-origin:50% 68%}.mouth{transform-origin:50% 50%;transition:.1s}.speaking .mouth{animation:mouth .16s ease-in-out infinite alternate}.speaking .head{animation:speakHead .42s ease-in-out infinite alternate}.arm-left{animation:armL 4s ease-in-out infinite;transform-origin:48% 58%}.arm-right{animation:armR 4.4s ease-in-out infinite;transform-origin:52% 58%}.speaking .arm-left{animation:talkL .82s ease-in-out infinite alternate}.speaking .arm-right{animation:talkR .78s ease-in-out infinite alternate}
-    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.018)}}@keyframes head{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(1.2deg)}}@keyframes speakBody{from{transform:translateY(0) scale(1)}to{transform:translateY(-6px) scale(1.025)}}@keyframes speakHead{from{transform:rotate(-2deg) translateY(0)}to{transform:rotate(2deg) translateY(-3px)}}@keyframes mouth{from{transform:scaleY(.45);opacity:.7}to{transform:scaleY(1.8);opacity:1}}@keyframes armL{0%,100%{transform:rotate(0)}50%{transform:rotate(2deg)}}@keyframes armR{0%,100%{transform:rotate(0)}50%{transform:rotate(-2deg)}}@keyframes talkL{from{transform:rotate(-4deg)}to{transform:rotate(8deg)}}@keyframes talkR{from{transform:rotate(4deg)}to{transform:rotate(-8deg)}}
-    .hint{position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);color:#b0b0b7;font-size:12px;text-align:center}.hint:before{content:"";display:block;width:42px;height:5px;background:#d1d1d6;border-radius:4px;margin:0 auto 8px}
-    .modal{position:fixed;inset:0;display:grid;place-items:center;padding:22px;z-index:50;background:rgba(251,251,253,.62);backdrop-filter:blur(8px)}.modal.hidden{display:none}.card{width:min(430px,100%);padding:26px;border-radius:28px;background:rgba(255,255,255,.94);box-shadow:0 24px 70px rgba(0,0,0,.14);border:1px solid var(--line);text-align:center}.card h1{margin:0 0 8px;font-size:24px}.card p{margin:0 0 14px;color:var(--muted);line-height:1.38}.modal-error{display:none;margin:12px 0 0;padding:10px;border-radius:14px;background:#fff1f0;color:#9f1c15;font-size:13px;text-align:left;white-space:pre-wrap}.modal-error.show{display:block}
-    button,input{width:100%;min-height:48px;border:0;border-radius:16px;padding:12px 14px;font:inherit}button{background:var(--blue);color:#fff;font-weight:700;cursor:pointer;touch-action:manipulation}button:disabled{opacity:.62;cursor:default}input{background:#f5f5f7;border:1px solid var(--line);color:var(--text)}
-    .sheet{position:fixed;left:0;right:0;bottom:0;height:min(78dvh,760px);z-index:30;transform:translateY(calc(100% - 56px));transition:transform .26s ease;border-radius:30px 30px 0 0;background:rgba(255,255,255,.95);backdrop-filter:blur(24px);border:1px solid var(--line);box-shadow:0 -28px 70px rgba(0,0,0,.12);display:flex;flex-direction:column;overflow:hidden}.sheet.open{transform:translateY(0)}@media(min-width:760px){.sheet{left:50%;right:auto;width:720px;transform:translate(-50%,calc(100% - 56px))}.sheet.open{transform:translate(-50%,0)}}
-    .handle-wrap{padding:10px 18px 6px;text-align:center}.handle{width:48px;height:5px;border-radius:6px;background:#d1d1d6;margin:0 auto 8px}.chat-title{font-weight:700;font-size:15px}.log{flex:1;overflow:auto;padding:10px 14px;display:flex;flex-direction:column;gap:9px}.bubble{max-width:88%;padding:11px 13px;border-radius:18px;line-height:1.35;font-size:15px;white-space:pre-wrap}.me{align-self:flex-end;background:var(--blue);color:white;border-bottom-right-radius:6px}.ai{align-self:flex-start;background:#f1f1f4;color:var(--text);border-bottom-left-radius:6px}.system{align-self:center;max-width:94%;background:#fff8dc;color:#6b5b00;font-size:13px}
-    .controls{padding:10px 14px max(14px,env(safe-area-inset-bottom));border-top:1px solid var(--line);display:grid;gap:8px}.row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}.row button{width:auto;padding-inline:16px}.secondary{background:#1d1d1f}.ghost{background:#f2f2f7;color:var(--text)}
+    :root {
+      --bg: #fbfbfd;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --line: rgba(0,0,0,.09);
+      --blue: #007aff;
+      --green: #34c759;
+      --red: #ff3b30;
+      --glass: rgba(255,255,255,.82);
+      --avatar-scale: 1;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 50% 42%, #edf6ff 0, #ffffff 42%, var(--bg) 100%);
+      color: var(--text);
+    }
+
+    body.dark {
+      --bg: #050506;
+      --text: #f5f5f7;
+      --muted: #a1a1a6;
+      --line: rgba(255,255,255,.14);
+      --glass: rgba(28,28,30,.76);
+      background:
+        radial-gradient(circle at 50% 42%, #172033 0, #0b0b0c 46%, #050506 100%);
+    }
+
+    .app {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+      position: relative;
+    }
+
+    .top {
+      position: fixed;
+      top: max(14px, env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 25;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      max-width: calc(100vw - 24px);
+    }
+
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 7px 13px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.05);
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 99px;
+      background: #c7c7cc;
+      flex: 0 0 auto;
+    }
+
+    .ok .dot {
+      background: var(--green);
+      box-shadow: 0 0 0 6px rgba(52,199,89,.12);
+    }
+
+    .bad .dot {
+      background: var(--red);
+      box-shadow: 0 0 0 6px rgba(255,59,48,.12);
+    }
+
+    .admin-pill {
+      display: none;
+      color: #fff;
+      background: linear-gradient(135deg, #111, #3b3b40);
+      border-color: rgba(255,255,255,.18);
+      cursor: pointer;
+      border: 0;
+      width: auto;
+      min-height: 34px;
+      padding: 7px 13px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .admin .admin-pill {
+      display: flex;
+    }
+
+    .admin-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 5px rgba(52,199,89,.18);
+    }
+
+    .avatar-shell {
+      transform: scale(var(--avatar-scale));
+      transition: transform .28s ease;
+    }
+
+    .avatar-box {
+      width: min(74vw, 370px);
+      height: min(74vw, 370px);
+      display: grid;
+      place-items: center;
+      filter: drop-shadow(0 36px 40px rgba(37,70,120,.15));
+      animation: float 4.8s ease-in-out infinite;
+    }
+
+    .speaking .avatar-box {
+      animation: speakBody .58s ease-in-out infinite alternate;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .head {
+      animation: head 5.8s ease-in-out infinite;
+      transform-origin: 50% 42%;
+    }
+
+    .body {
+      animation: breathe 3.2s ease-in-out infinite;
+      transform-origin: 50% 68%;
+    }
+
+    .mouth {
+      transform-origin: 50% 50%;
+    }
+
+    .speaking .mouth {
+      animation: mouth .16s ease-in-out infinite alternate;
+    }
+
+    .speaking .head {
+      animation: speakHead .42s ease-in-out infinite alternate;
+    }
+
+    .arm-left {
+      animation: armL 4s ease-in-out infinite;
+      transform-origin: 48% 58%;
+    }
+
+    .arm-right {
+      animation: armR 4.4s ease-in-out infinite;
+      transform-origin: 52% 58%;
+    }
+
+    .speaking .arm-left {
+      animation: talkL .82s ease-in-out infinite alternate;
+    }
+
+    .speaking .arm-right {
+      animation: talkR .78s ease-in-out infinite alternate;
+    }
+
+    @keyframes float {
+      0%,100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    @keyframes breathe {
+      0%,100% { transform: scale(1); }
+      50% { transform: scale(1.018); }
+    }
+
+    @keyframes head {
+      0%,100% { transform: rotate(-1deg); }
+      50% { transform: rotate(1.2deg); }
+    }
+
+    @keyframes speakBody {
+      from { transform: translateY(0) scale(1); }
+      to { transform: translateY(-6px) scale(1.025); }
+    }
+
+    @keyframes speakHead {
+      from { transform: rotate(-2deg) translateY(0); }
+      to { transform: rotate(2deg) translateY(-3px); }
+    }
+
+    @keyframes mouth {
+      from { transform: scaleY(.45); opacity: .7; }
+      to { transform: scaleY(1.8); opacity: 1; }
+    }
+
+    @keyframes armL {
+      0%,100% { transform: rotate(0); }
+      50% { transform: rotate(2deg); }
+    }
+
+    @keyframes armR {
+      0%,100% { transform: rotate(0); }
+      50% { transform: rotate(-2deg); }
+    }
+
+    @keyframes talkL {
+      from { transform: rotate(-4deg); }
+      to { transform: rotate(8deg); }
+    }
+
+    @keyframes talkR {
+      from { transform: rotate(4deg); }
+      to { transform: rotate(-8deg); }
+    }
+
+    .hint {
+      position: fixed;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      color: #b0b0b7;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .hint::before {
+      content: "";
+      display: block;
+      width: 42px;
+      height: 5px;
+      background: #d1d1d6;
+      border-radius: 4px;
+      margin: 0 auto 8px;
+    }
+
+    .sheet {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: min(74dvh, 700px);
+      z-index: 20;
+      transform: translateY(calc(100% - 56px));
+      transition: transform .28s cubic-bezier(.2,.8,.2,1);
+      border-radius: 30px 30px 0 0;
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(26px);
+      border: 1px solid var(--line);
+      box-shadow: 0 -28px 70px rgba(0,0,0,.12);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    body.dark .sheet {
+      background: rgba(28,28,30,.94);
+    }
+
+    .sheet.open {
+      transform: translateY(0);
+    }
+
+    @media (min-width: 760px) {
+      .sheet {
+        left: 50%;
+        right: auto;
+        width: 720px;
+        transform: translate(-50%, calc(100% - 56px));
+      }
+
+      .sheet.open {
+        transform: translate(-50%, 0);
+      }
+    }
+
+    .handle-wrap {
+      padding: 10px 18px 8px;
+      text-align: center;
+    }
+
+    .handle {
+      width: 48px;
+      height: 5px;
+      border-radius: 6px;
+      background: #d1d1d6;
+      margin: 0 auto 8px;
+    }
+
+    .chat-title {
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .log {
+      flex: 1;
+      overflow: auto;
+      padding: 10px 14px max(18px, env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .bubble {
+      max-width: 88%;
+      padding: 11px 13px;
+      border-radius: 18px;
+      line-height: 1.35;
+      font-size: 15px;
+      white-space: pre-wrap;
+    }
+
+    .me {
+      align-self: flex-end;
+      background: var(--blue);
+      color: white;
+      border-bottom-right-radius: 6px;
+    }
+
+    .ai {
+      align-self: flex-start;
+      background: #f1f1f4;
+      color: var(--text);
+      border-bottom-left-radius: 6px;
+    }
+
+    body.dark .ai {
+      background: #2c2c2e;
+    }
+
+    .system {
+      align-self: center;
+      max-width: 94%;
+      background: #fff8dc;
+      color: #6b5b00;
+      font-size: 13px;
+    }
+
+    body.dark .system {
+      background: #3a3212;
+      color: #fff0a8;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 22px;
+      z-index: 60;
+      background: rgba(251,251,253,.64);
+      backdrop-filter: blur(10px);
+    }
+
+    body.dark .modal {
+      background: rgba(0,0,0,.55);
+    }
+
+    .modal.show {
+      display: grid;
+    }
+
+    .card {
+      width: min(430px, 100%);
+      padding: 26px;
+      border-radius: 28px;
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 24px 70px rgba(0,0,0,.14);
+      border: 1px solid var(--line);
+      text-align: center;
+    }
+
+    body.dark .card {
+      background: rgba(28,28,30,.95);
+    }
+
+    .card h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+
+    .card p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.38;
+    }
+
+    button,
+    input {
+      width: 100%;
+      min-height: 50px;
+      border: 0;
+      border-radius: 16px;
+      padding: 12px 14px;
+      font: inherit;
+    }
+
+    button {
+      background: var(--blue);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.ghost {
+      background: #f2f2f7;
+      color: var(--text);
+      margin-top: 8px;
+    }
+
+    body.dark button.ghost {
+      background: #2c2c2e;
+    }
+
+    input {
+      background: #f5f5f7;
+      border: 1px solid var(--line);
+      font-size: 22px;
+      text-align: center;
+      letter-spacing: 8px;
+      color: var(--text);
+    }
+
+    body.dark input {
+      background: #1c1c1e;
+    }
+
+    .error {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 14px;
+      background: #fff1f0;
+      color: #9f1c15;
+      font-size: 13px;
+      text-align: left;
+      white-space: pre-wrap;
+      display: none;
+    }
+
+    .error.show {
+      display: block;
+    }
   </style>
 </head>
+
 <body>
   <div id="root" class="app">
-    <div id="statusPill" class="status"><span class="dot"></span><span id="statusText">Bereit</span></div>
-    <div class="avatar-box" aria-label="Avatar"><svg viewBox="0 0 360 360"><defs><radialGradient id="skin" cx="42%" cy="24%" r="70%"><stop offset="0" stop-color="#ffe0bf"/><stop offset="1" stop-color="#f3a56f"/></radialGradient><linearGradient id="shirt" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#2f7bff"/><stop offset="1" stop-color="#0b2d68"/></linearGradient><linearGradient id="hair" x1="0" x2="1"><stop offset="0" stop-color="#7a3a12"/><stop offset="1" stop-color="#23130b"/></linearGradient></defs><ellipse cx="180" cy="326" rx="76" ry="14" fill="#dce7f7" opacity=".75"/><g class="body"><path d="M128 208c10-31 32-49 52-49s42 18 52 49l21 88c2 9-4 17-13 17H120c-9 0-15-8-13-17l21-88z" fill="url(#shirt)"/><path d="M151 168c13 14 45 14 58 0l-7 32h-44l-7-32z" fill="url(#skin)"/><path d="M151 209h58" stroke="#fff" stroke-width="4" opacity=".75"/><g class="arm-left"><path d="M130 218c-22 17-35 39-37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/><circle cx="92" cy="290" r="9" fill="url(#skin)"/></g><g class="arm-right"><path d="M230 218c22 17 35 39 37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/><circle cx="268" cy="290" r="9" fill="url(#skin)"/></g><path d="M151 313l-6 28h28l3-28zm58 0 6 28h-28l-3-28z" fill="#153b7c"/></g><g class="head"><path d="M114 127c4-50 30-84 71-82 41 2 66 34 62 82-2 28-17 54-39 68-16 10-41 10-57 0-22-14-35-40-37-68z" fill="url(#skin)"/><path d="M119 111c8-45 38-72 76-67 32 4 55 27 58 62-20-16-48-24-86-22-20 1-35 9-48 27z" fill="url(#hair)"/><path d="M116 118c-8 22-5 48 5 69-25-20-28-63-5-87z" fill="url(#hair)" opacity=".95"/><circle cx="158" cy="133" r="7" fill="#1d1d1f"/><circle cx="204" cy="133" r="7" fill="#1d1d1f"/><circle cx="155" cy="130" r="2" fill="white"/><circle cx="201" cy="130" r="2" fill="white"/><path d="M147 119c12-7 22-7 31-1M192 118c10-6 21-5 31 2" stroke="#2a160d" stroke-width="5" stroke-linecap="round" fill="none"/><path d="M181 139c-3 8-5 15-1 21" stroke="#c7794b" stroke-width="4" stroke-linecap="round" fill="none"/><ellipse class="mouth" cx="181" cy="174" rx="18" ry="6" fill="#7b1d1d"/><path d="M162 178c10 10 29 10 39 0" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".9"/></g></svg></div>
-    <div class="hint">Nach oben wischen für Verlauf und Admin</div>
+    <div class="top">
+      <div id="statusPill" class="pill">
+        <span class="dot"></span>
+        <span id="statusText">Verbinde...</span>
+      </div>
+
+      <button id="adminPill" class="pill admin-pill" type="button">
+        <span class="admin-dot"></span>
+        Admin aktiv
+      </button>
+    </div>
+
+    <div class="avatar-shell">
+      <div class="avatar-box" aria-label="Avatar">
+        <svg viewBox="0 0 360 360" role="img" aria-label="Cartoon Avatar">
+          <defs>
+            <radialGradient id="skin" cx="42%" cy="24%" r="70%">
+              <stop offset="0" stop-color="#ffe0bf"/>
+              <stop offset="1" stop-color="#f3a56f"/>
+            </radialGradient>
+            <linearGradient id="shirt" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0" stop-color="#2f7bff"/>
+              <stop offset="1" stop-color="#0b2d68"/>
+            </linearGradient>
+            <linearGradient id="hair" x1="0" x2="1">
+              <stop offset="0" stop-color="#7a3a12"/>
+              <stop offset="1" stop-color="#23130b"/>
+            </linearGradient>
+          </defs>
+
+          <ellipse cx="180" cy="326" rx="76" ry="14" fill="#dce7f7" opacity=".75"/>
+
+          <g class="body">
+            <path d="M128 208c10-31 32-49 52-49s42 18 52 49l21 88c2 9-4 17-13 17H120c-9 0-15-8-13-17l21-88z" fill="url(#shirt)"/>
+            <path d="M151 168c13 14 45 14 58 0l-7 32h-44l-7-32z" fill="url(#skin)"/>
+            <path d="M151 209h58" stroke="#fff" stroke-width="4" opacity=".75"/>
+            <g class="arm-left">
+              <path d="M130 218c-22 17-35 39-37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/>
+              <circle cx="92" cy="290" r="9" fill="url(#skin)"/>
+            </g>
+            <g class="arm-right">
+              <path d="M230 218c22 17 35 39 37 67" stroke="#f0a36d" stroke-width="18" stroke-linecap="round" fill="none"/>
+              <circle cx="268" cy="290" r="9" fill="url(#skin)"/>
+            </g>
+            <path d="M151 313l-6 28h28l3-28zm58 0 6 28h-28l-3-28z" fill="#153b7c"/>
+          </g>
+
+          <g class="head">
+            <path d="M114 127c4-50 30-84 71-82 41 2 66 34 62 82-2 28-17 54-39 68-16 10-41 10-57 0-22-14-35-40-37-68z" fill="url(#skin)"/>
+            <path d="M119 111c8-45 38-72 76-67 32 4 55 27 58 62-20-16-48-24-86-22-20 1-35 9-48 27z" fill="url(#hair)"/>
+            <path d="M116 118c-8 22-5 48 5 69-25-20-28-63-5-87z" fill="url(#hair)" opacity=".95"/>
+            <circle cx="158" cy="133" r="7" fill="#1d1d1f"/>
+            <circle cx="204" cy="133" r="7" fill="#1d1d1f"/>
+            <circle cx="155" cy="130" r="2" fill="white"/>
+            <circle cx="201" cy="130" r="2" fill="white"/>
+            <path d="M147 119c12-7 22-7 31-1M192 118c10-6 21-5 31 2" stroke="#2a160d" stroke-width="5" stroke-linecap="round" fill="none"/>
+            <path d="M181 139c-3 8-5 15-1 21" stroke="#c7794b" stroke-width="4" stroke-linecap="round" fill="none"/>
+            <ellipse class="mouth" cx="181" cy="174" rx="18" ry="6" fill="#7b1d1d"/>
+            <path d="M162 178c10 10 29 10 39 0" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".9"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="hint">Nach oben wischen für Verlauf</div>
   </div>
-  <div id="startModal" class="modal"><div class="card"><h1>Sprachmodus starten</h1><p id="modalText">Einmal tippen, dann kannst du mit dem Agenten sprechen.</p><button id="startBtn" type="button">Jetzt starten</button><div id="modalError" class="modal-error"></div></div></div>
-  <section id="chatSheet" class="sheet"><div id="chatHandle" class="handle-wrap"><div class="handle"></div><div class="chat-title">Verlauf & Admin</div></div><div id="chatLog" class="log"></div><div class="controls"><div class="row"><input id="textInput" placeholder="Nachricht oder Änderungswunsch" autocomplete="off"/><button id="sendBtn" type="button">Senden</button></div><div class="row"><input id="adminPin" placeholder="Admin-PIN" type="password" inputmode="numeric" autocomplete="off"/><button id="changeBtn" class="secondary" type="button">Änderung</button></div><div class="row"><input id="fileInput" type="file"/><button id="uploadBtn" class="ghost" type="button">Upload</button></div></div></section>
+
+  <section id="chatSheet" class="sheet">
+    <div id="chatHandle" class="handle-wrap">
+      <div class="handle"></div>
+      <div class="chat-title">Verlauf</div>
+    </div>
+    <div id="chatLog" class="log"></div>
+  </section>
+
+  <div id="startModal" class="modal">
+    <div class="card">
+      <h1>Zum Starten tippen</h1>
+      <p>Der Browser braucht einmal deine Freigabe für Mikrofon und Audio.</p>
+      <button id="startBtn" type="button">Einmal tippen</button>
+      <div id="startError" class="error"></div>
+    </div>
+  </div>
+
+  <div id="pinModal" class="modal">
+    <div class="card">
+      <h1>Admin-Modus</h1>
+      <p>PIN eingeben, um App-Änderungen per Sprache zu erlauben.</p>
+      <input id="pinInput" type="password" inputmode="numeric" autocomplete="off" placeholder="••••" />
+      <button id="pinConfirm" type="button">Bestätigen</button>
+      <button id="pinCancel" class="ghost" type="button">Abbrechen</button>
+      <div id="pinError" class="error"></div>
+    </div>
+  </div>
+
   <script>
-    const DEFAULT_INSTRUCTIONS='Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, ausser der Nutzer wuenscht eine andere Sprache. Antworte natuerlich, klar und knapp.';
-    const $=(id)=>document.getElementById(id);const root=$('root'),statusPill=$('statusPill'),statusText=$('statusText'),startModal=$('startModal'),startBtn=$('startBtn'),modalText=$('modalText'),modalError=$('modalError'),chatSheet=$('chatSheet'),chatHandle=$('chatHandle'),chatLog=$('chatLog'),textInput=$('textInput'),sendBtn=$('sendBtn'),adminPin=$('adminPin'),changeBtn=$('changeBtn'),fileInput=$('fileInput'),uploadBtn=$('uploadBtn');
-    let pc=null,dc=null,remoteAudio=null,dragStartY=0,lastUserTranscript='',currentAiBubble=null,stopSpeakingTimer=null,connecting=false;adminPin.value=localStorage.getItem('adminPin')||'';adminPin.addEventListener('input',()=>localStorage.setItem('adminPin',adminPin.value));
-    function setStatus(t,m=''){statusText.textContent=t;statusPill.classList.toggle('ok',m==='ok');statusPill.classList.toggle('bad',m==='bad')}function setModal(t,e=''){modalText.textContent=t;modalError.textContent=e;modalError.classList.toggle('show',!!e)}function openChat(o){chatSheet.classList.toggle('open',o)}function bubble(r,t){const el=document.createElement('div');el.className='bubble '+r;el.textContent=t;chatLog.appendChild(el);chatLog.scrollTop=chatLog.scrollHeight;return el}function aiDelta(t){if(!currentAiBubble)currentAiBubble=bubble('ai','');currentAiBubble.textContent+=t;chatLog.scrollTop=chatLog.scrollHeight}function speak(){clearTimeout(stopSpeakingTimer);root.classList.add('speaking')}function stopSoon(){clearTimeout(stopSpeakingTimer);stopSpeakingTimer=setTimeout(()=>root.classList.remove('speaking'),1500)}
-    function isChange(t){t=String(t||'').toLowerCase();return t.includes('änderung erstellen')||t.includes('aenderung erstellen')||t.includes('änderungswunsch')||t.includes('app ändern')||t.includes('app aendern')||t.includes('admin-modus')||t.includes('admin modus')}function cleanChange(t){return String(t||'').replace(/admin[- ]modus/ig,'').replace(/änderung erstellen:?/ig,'').replace(/aenderung erstellen:?/ig,'').trim()}function fail(m){setStatus(m,'bad');setModal('Start fehlgeschlagen.',m);bubble('system',m);startModal.classList.remove('hidden');startBtn.disabled=false;startBtn.textContent='Nochmal starten';connecting=false;disconnect(false)}
-    async function fetchWithTimeout(url,opt={},ms=25000){const c=new AbortController();const id=setTimeout(()=>c.abort(),ms);try{return await fetch(url,{...opt,signal:c.signal})}finally{clearTimeout(id)}}
-    async function connect(){if(connecting)return;connecting=true;startBtn.disabled=true;startBtn.textContent='Starte...';setModal('Mikrofon wird angefragt...');setStatus('Mikrofon wird gestartet...');try{if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Mikrofon wird in diesem Browser nicht unterstützt. Bitte Safari/Chrome mit HTTPS nutzen.');const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});setModal('Token wird erstellt...');const tokenResp=await fetchWithTimeout('/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instructions:DEFAULT_INSTRUCTIONS,voice:'marin'})},20000);const tokenText=await tokenResp.text();let tokenData={};try{tokenData=JSON.parse(tokenText)}catch(_){}const key=tokenData?.value||tokenData?.client_secret?.value;if(!tokenResp.ok||!key)throw new Error('/session Fehler '+tokenResp.status+': '+tokenText);setModal('Audio wird verbunden...');setStatus('Audio wird verbunden...');remoteAudio=remoteAudio||document.createElement('audio');remoteAudio.autoplay=true;remoteAudio.playsInline=true;remoteAudio.setAttribute('playsinline','');document.body.appendChild(remoteAudio);pc=new RTCPeerConnection();pc.ontrack=(e)=>{remoteAudio.srcObject=e.streams[0];remoteAudio.play().catch(()=>{})};pc.onconnectionstatechange=()=>setStatus('Verbindung: '+pc.connectionState,pc.connectionState==='connected'?'ok':'');stream.getTracks().forEach((track)=>pc.addTrack(track,stream));dc=pc.createDataChannel('oai-events');dc.onopen=()=>setStatus('Sprich jetzt','ok');dc.onerror=()=>setStatus('DataChannel-Fehler','bad');dc.onmessage=(event)=>handleRealtime(event.data);const offer=await pc.createOffer();await pc.setLocalDescription(offer);setModal('Realtime wird verbunden...');const api=['https://api.openai.com/v1','realtime','calls'].join('/');const headers={};headers['Authorization']='Bearer '+key;headers['Content-Type']='application/sdp';const sdpResp=await fetchWithTimeout(api,{method:'POST',body:offer.sdp,headers},30000);const answer=await sdpResp.text();if(!sdpResp.ok)throw new Error('SDP Fehler '+sdpResp.status+': '+answer);await pc.setRemoteDescription({type:'answer',sdp:answer});startModal.classList.add('hidden');startBtn.disabled=false;startBtn.textContent='Jetzt starten';connecting=false;bubble('system','Sprachmodus aktiv. Für Änderungen sag: "Änderung erstellen: ..."')}catch(error){fail(error?.name==='AbortError'?'Verbindung hat zu lange gedauert. Bitte erneut starten.':String(error.message||error))}}
-    function disconnect(show=true){try{if(dc)dc.close();if(pc)pc.close()}catch(_){}dc=null;pc=null;root.classList.remove('speaking');if(show)startModal.classList.remove('hidden')}function handleRealtime(raw){let msg;try{msg=JSON.parse(raw)}catch(_){return}const type=msg.type||'';if(type.startsWith('response.'))speak();if(type==='response.audio.delta'||type==='response.audio_transcript.delta'||type==='response.created')speak();if((type==='response.audio_transcript.delta'||type==='response.output_text.delta')&&msg.delta)aiDelta(msg.delta);if(type==='response.audio_transcript.done'||type==='response.done'||type==='response.output_text.done'){currentAiBubble=null;stopSoon()}if(type==='conversation.item.input_audio_transcription.completed'&&msg.transcript){lastUserTranscript=msg.transcript;bubble('me',msg.transcript);if(isChange(msg.transcript))createChangeRequest(msg.transcript)}if(type==='error')bubble('system',msg.error?.message||JSON.stringify(msg))}
-    async function createChangeRequest(source){const transcript=cleanChange(source||textInput.value||lastUserTranscript);if(!transcript){bubble('system','Kein Änderungswunsch erkannt.');return}if(!adminPin.value.trim()){openChat(true);bubble('system','Bitte Admin-PIN eintragen.');return}changeBtn.disabled=true;bubble('system','Erstelle GitHub-Änderung...');try{const res=await fetch('/change-request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({adminPin:adminPin.value.trim(),transcript,summary:transcript.slice(0,180)})});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.error||JSON.stringify(data));bubble('ai','Änderung erstellt: '+data.issueUrl);textInput.value=''}catch(e){bubble('system','Änderung fehlgeschlagen: '+e.message)}finally{changeBtn.disabled=false}}
-    function sendText(){const text=textInput.value.trim();if(!text)return;lastUserTranscript=text;bubble('me',text);if(isChange(text)){createChangeRequest(text);return}if(!dc||dc.readyState!=='open'){bubble('system','Voice-Verbindung ist noch nicht aktiv.');return}dc.send(JSON.stringify({type:'conversation.item.create',item:{type:'message',role:'user',content:[{type:'input_text',text}]}}));dc.send(JSON.stringify({type:'response.create'}));textInput.value=''}async function uploadFile(){const file=fileInput.files[0];if(!file)return;const fd=new FormData();fd.append('file',file);bubble('system','Upload startet: '+file.name);try{const res=await fetch('/upload',{method:'POST',body:fd});const data=await res.json();if(!res.ok)throw new Error(data.error||'Upload fehlgeschlagen');bubble('me','[Datei hochgeladen] '+data.file.name)}catch(e){bubble('system',e.message)}}
-    function startTap(e){if(e){e.preventDefault();e.stopPropagation()}connect()}startBtn.addEventListener('click',startTap);startBtn.addEventListener('touchend',startTap,{passive:false});startBtn.addEventListener('pointerup',startTap);sendBtn.addEventListener('click',sendText);changeBtn.addEventListener('click',()=>createChangeRequest(textInput.value||lastUserTranscript));uploadBtn.addEventListener('click',uploadFile);textInput.addEventListener('keydown',(e)=>{if(e.key==='Enter')sendText()});chatHandle.addEventListener('click',()=>openChat(!chatSheet.classList.contains('open')));chatSheet.addEventListener('touchstart',(e)=>{dragStartY=e.touches[0].clientY},{passive:true});chatSheet.addEventListener('touchend',(e)=>{const d=dragStartY-e.changedTouches[0].clientY;if(d>30)openChat(true);if(d<-30)openChat(false)},{passive:true});document.body.addEventListener('touchstart',(e)=>{dragStartY=e.touches[0].clientY},{passive:true});document.body.addEventListener('touchend',(e)=>{const d=dragStartY-e.changedTouches[0].clientY;if(d>55)openChat(true)},{passive:true});setStatus('Bereit');setModal('Einmal tippen, dann kannst du mit dem Agenten sprechen.');
+    const DEFAULT_INSTRUCTIONS =
+      'Du bist ein hilfreicher allgemeiner ChatGPT-Voice-Assistent. Sprich Deutsch, außer der Nutzer wünscht eine andere Sprache. Antworte natürlich, klar und knapp. Wenn der Nutzer "Frosch Frosch" sagt, bestätige kurz den Admin-Modus.';
+
+    const $ = (id) => document.getElementById(id);
+
+    const root = $('root');
+    const statusPill = $('statusPill');
+    const statusText = $('statusText');
+    const adminPill = $('adminPill');
+    const chatSheet = $('chatSheet');
+    const chatHandle = $('chatHandle');
+    const chatLog = $('chatLog');
+    const startModal = $('startModal');
+    const startBtn = $('startBtn');
+    const startError = $('startError');
+    const pinModal = $('pinModal');
+    const pinInput = $('pinInput');
+    const pinConfirm = $('pinConfirm');
+    const pinCancel = $('pinCancel');
+    const pinError = $('pinError');
+
+    let pc = null;
+    let dc = null;
+    let remoteAudio = null;
+    let dragStartY = 0;
+    let lastUserTranscript = '';
+    let currentAiBubble = null;
+    let stopSpeakingTimer = null;
+    let connecting = false;
+    let adminMode = false;
+    let adminPin = '';
+    let pendingAdminTranscript = '';
+
+    function setStatus(text, mode = '') {
+      statusText.textContent = text;
+      statusPill.classList.toggle('ok', mode === 'ok');
+      statusPill.classList.toggle('bad', mode === 'bad');
+    }
+
+    function showError(el, text) {
+      el.textContent = text || '';
+      el.classList.toggle('show', Boolean(text));
+    }
+
+    function openChat(open) {
+      chatSheet.classList.toggle('open', open);
+    }
+
+    function bubble(role, text) {
+      const el = document.createElement('div');
+      el.className = `bubble ${role}`;
+      el.textContent = text;
+      chatLog.appendChild(el);
+      chatLog.scrollTop = chatLog.scrollHeight;
+      return el;
+    }
+
+    function aiDelta(text) {
+      if (!currentAiBubble) currentAiBubble = bubble('ai', '');
+      currentAiBubble.textContent += text;
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function speak() {
+      clearTimeout(stopSpeakingTimer);
+      root.classList.add('speaking');
+    }
+
+    function stopSoon() {
+      clearTimeout(stopSpeakingTimer);
+      stopSpeakingTimer = setTimeout(() => {
+        root.classList.remove('speaking');
+      }, 1500);
+    }
+
+    function setAdmin(on) {
+      adminMode = on;
+      root.classList.toggle('admin', on);
+      setStatus(on ? 'Admin aktiv' : 'Sprich jetzt', 'ok');
+      bubble('system', on ? 'Admin-Modus aktiv. Sag deine Änderung.' : 'Admin-Modus beendet.');
+    }
+
+    function hasTrigger(text) {
+      return String(text || '')
+        .toLowerCase()
+        .replace(/[.,!?]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .includes('frosch frosch');
+    }
+
+    function cleanTrigger(text) {
+      return String(text || '').replace(/frosch frosch/ig, '').trim();
+    }
+
+    function looksLikeChange(text) {
+      return /(mach|ändere|aendere|entferne|baue|füge|fuege|stelle|design|avatar|app|button|farbe|größe|groesse|chat|layout|hintergrund|kleiner|größer|groesser)/i.test(String(text || ''));
+    }
+
+    async function fetchWithTimeout(url, options = {}, ms = 25000) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), ms);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    function fail(message) {
+      setStatus('Start fehlgeschlagen', 'bad');
+      showError(startError, message);
+      startModal.classList.add('show');
+      connecting = false;
+      disconnect(false);
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/app-config.json?v=' + Date.now());
+        if (!res.ok) return;
+        const config = await res.json();
+
+        if (config.avatarScale) {
+          document.documentElement.style.setProperty('--avatar-scale', String(config.avatarScale));
+        }
+
+        document.body.classList.toggle('dark', config.theme === 'dark');
+      } catch (_) {}
+    }
+
+    async function connect() {
+      if (connecting || dc?.readyState === 'open') return;
+
+      connecting = true;
+      showError(startError, '');
+      startModal.classList.remove('show');
+      setStatus('Verbinde...');
+
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error('Mikrofon wird in diesem Browser nicht unterstützt.');
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+
+        setStatus('Token...');
+        const tokenResp = await fetchWithTimeout('/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instructions: DEFAULT_INSTRUCTIONS,
+            voice: 'marin'
+          })
+        }, 20000);
+
+        const tokenText = await tokenResp.text();
+        let tokenData = {};
+        try {
+          tokenData = JSON.parse(tokenText);
+        } catch (_) {}
+
+        const key = tokenData?.value || tokenData?.client_secret?.value;
+        if (!tokenResp.ok || !key) {
+          throw new Error('/session Fehler ' + tokenResp.status + ': ' + tokenText);
+        }
+
+        setStatus('Audio...');
+        remoteAudio = remoteAudio || document.createElement('audio');
+        remoteAudio.autoplay = true;
+        remoteAudio.playsInline = true;
+        remoteAudio.setAttribute('playsinline', '');
+        document.body.appendChild(remoteAudio);
+
+        pc = new RTCPeerConnection();
+
+        pc.ontrack = (event) => {
+          remoteAudio.srcObject = event.streams[0];
+          remoteAudio.play().catch(() => {});
+        };
+
+        pc.onconnectionstatechange = () => {
+          if (pc.connectionState === 'connected') {
+            setStatus(adminMode ? 'Admin aktiv' : 'Sprich jetzt', 'ok');
+          }
+        };
+
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+        dc = pc.createDataChannel('oai-events');
+
+        dc.onopen = () => {
+          setStatus(adminMode ? 'Admin aktiv' : 'Sprich jetzt', 'ok');
+          bubble('system', 'Bereit. Sag „Frosch Frosch“ für Admin-Modus.');
+
+          try {
+            dc.send(JSON.stringify({
+              type: 'session.update',
+              session: {
+                audio: {
+                  input: {
+                    transcription: {
+                      model: 'gpt-4o-mini-transcribe'
+                    }
+                  }
+                }
+              }
+            }));
+          } catch (_) {}
+        };
+
+        dc.onerror = () => setStatus('DataChannel-Fehler', 'bad');
+        dc.onmessage = (event) => handleRealtime(event.data);
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const api = ['https://api.openai.com/v1', 'realtime', 'calls'].join('/');
+        const headers = {
+          Authorization: 'Bearer ' + key,
+          'Content-Type': 'application/sdp'
+        };
+
+        const sdpResp = await fetchWithTimeout(api, {
+          method: 'POST',
+          body: offer.sdp,
+          headers
+        }, 30000);
+
+        const answer = await sdpResp.text();
+        if (!sdpResp.ok) {
+          throw new Error('SDP Fehler ' + sdpResp.status + ': ' + answer);
+        }
+
+        await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+        connecting = false;
+      } catch (error) {
+        fail(
+          error?.name === 'NotAllowedError'
+            ? 'Bitte Mikrofon erlauben und erneut tippen.'
+            : error?.name === 'AbortError'
+              ? 'Verbindung hat zu lange gedauert.'
+              : String(error.message || error)
+        );
+      }
+    }
+
+    function disconnect(show = true) {
+      try {
+        if (dc) dc.close();
+        if (pc) pc.close();
+      } catch (_) {}
+
+      dc = null;
+      pc = null;
+      root.classList.remove('speaking');
+
+      if (show) startModal.classList.add('show');
+    }
+
+    function handleRealtime(raw) {
+      let msg;
+      try {
+        msg = JSON.parse(raw);
+      } catch (_) {
+        return;
+      }
+
+      const type = msg.type || '';
+
+      if (type.startsWith('response.')) speak();
+      if (type === 'response.audio.delta' || type === 'response.audio_transcript.delta' || type === 'response.created') speak();
+
+      if ((type === 'response.audio_transcript.delta' || type === 'response.output_text.delta') && msg.delta) {
+        aiDelta(msg.delta);
+      }
+
+      if (type === 'response.audio_transcript.done' || type === 'response.done' || type === 'response.output_text.done') {
+        currentAiBubble = null;
+        stopSoon();
+      }
+
+      if (type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
+        handleUserTranscript(msg.transcript);
+      }
+
+      if (type === 'error') {
+        bubble('system', msg.error?.message || JSON.stringify(msg));
+      }
+    }
+
+    function handleUserTranscript(text) {
+      lastUserTranscript = text;
+      bubble('me', text);
+
+      if (hasTrigger(text)) {
+        pendingAdminTranscript = cleanTrigger(text);
+        openPin();
+        return;
+      }
+
+      if (adminMode) {
+        if (/admin.*(aus|beenden)|beenden|fertig/i.test(text)) {
+          setAdmin(false);
+          return;
+        }
+
+        if (looksLikeChange(text)) {
+          createConfigChange(text);
+        }
+      }
+    }
+
+    function openPin() {
+      pinInput.value = '';
+      showError(pinError, '');
+      pinModal.classList.add('show');
+      setStatus('PIN erforderlich');
+      setTimeout(() => pinInput.focus(), 150);
+      bubble('system', 'Admin-Modus. Bitte PIN eingeben.');
+    }
+
+    function closePin() {
+      pinModal.classList.remove('show');
+    }
+
+    async function confirmPin() {
+      const pin = pinInput.value.trim();
+
+      if (!pin) {
+        showError(pinError, 'PIN eingeben.');
+        return;
+      }
+
+      pinConfirm.disabled = true;
+      showError(pinError, 'Prüfe PIN...');
+
+      try {
+        const res = await fetch('/admin/apply-config-change', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminPin: pin, command: '' })
+        });
+
+        if (res.status === 401) {
+          showError(pinError, 'PIN falsch.');
+          return;
+        }
+
+        if (res.status !== 400) {
+          const text = await res.text();
+          showError(pinError, text || 'PIN konnte nicht geprüft werden.');
+          return;
+        }
+
+        adminPin = pin;
+        closePin();
+        setAdmin(true);
+
+        if (pendingAdminTranscript && looksLikeChange(pendingAdminTranscript)) {
+          createConfigChange(pendingAdminTranscript);
+          pendingAdminTranscript = '';
+        }
+      } catch (error) {
+        showError(pinError, String(error.message || error));
+      } finally {
+        pinConfirm.disabled = false;
+      }
+    }
+
+    async function createConfigChange(command) {
+      if (!adminPin) {
+        openPin();
+        return;
+      }
+
+      bubble('system', 'Erstelle GitHub-PR...');
+
+      try {
+        const res = await fetch('/admin/apply-config-change', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            adminPin,
+            command
+          })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.error || JSON.stringify(data));
+        }
+
+        bubble('ai', 'PR erstellt: ' + data.pullRequestUrl);
+      } catch (error) {
+        bubble('system', 'PR fehlgeschlagen: ' + error.message);
+      }
+    }
+
+    function startTap(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      connect();
+    }
+
+    startBtn.addEventListener('click', startTap);
+    startBtn.addEventListener('touchend', startTap, { passive: false });
+    startBtn.addEventListener('pointerup', startTap);
+
+    pinConfirm.addEventListener('click', confirmPin);
+    pinCancel.addEventListener('click', closePin);
+
+    pinInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') confirmPin();
+    });
+
+    adminPill.addEventListener('click', () => {
+      setAdmin(false);
+    });
+
+    chatHandle.addEventListener('click', () => {
+      openChat(!chatSheet.classList.contains('open'));
+    });
+
+    chatSheet.addEventListener('touchstart', (event) => {
+      dragStartY = event.touches[0].clientY;
+    }, { passive: true });
+
+    chatSheet.addEventListener('touchend', (event) => {
+      const delta = dragStartY - event.changedTouches[0].clientY;
+      if (delta > 30) openChat(true);
+      if (delta < -30) openChat(false);
+    }, { passive: true });
+
+    document.body.addEventListener('touchstart', (event) => {
+      dragStartY = event.touches[0].clientY;
+    }, { passive: true });
+
+    document.body.addEventListener('touchend', (event) => {
+      const delta = dragStartY - event.changedTouches[0].clientY;
+      if (delta > 55) openChat(true);
+    }, { passive: true });
+
+    loadConfig();
+    setStatus('Verbinde...');
+    setTimeout(() => connect().catch(() => {}), 350);
   </script>
 </body>
 </html>
