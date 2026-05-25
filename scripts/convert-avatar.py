@@ -50,10 +50,4 @@ def find_zip_files():
 
 
 def extract_zips(zip_files):
-    for zip_path in zip_files:
-        target = WORK_DIR / zip_path.stem
-        target.mkdir(parents=True, exist_ok=True)
-
-        log(f"Extracting {zip_path.name}")
-
-        with zipfile.ZipFile(zip_path,
+    for zip_path in zip_files
