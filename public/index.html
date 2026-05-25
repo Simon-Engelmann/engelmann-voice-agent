@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Engelmann Voice Agent</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-
   <script type="importmap">
     {
       "imports": {
@@ -71,8 +69,13 @@
     }
 
     @keyframes aurora {
-      from { transform: translate3d(-1%, -1%, 0) scale(1); }
-      to { transform: translate3d(1.5%, 1%, 0) scale(1.04); }
+      from {
+        transform: translate3d(-1%, -1%, 0) scale(1);
+      }
+
+      to {
+        transform: translate3d(1.5%, 1%, 0) scale(1.04);
+      }
     }
 
     .top {
@@ -148,8 +151,15 @@
     }
 
     @keyframes halo {
-      0%,100% { transform: scale(1); opacity: .92; }
-      50% { transform: scale(1.04); opacity: 1; }
+      0%,100% {
+        transform: scale(1);
+        opacity: .92;
+      }
+
+      50% {
+        transform: scale(1.04);
+        opacity: 1;
+      }
     }
 
     #threeWrap {
@@ -169,12 +179,23 @@
       inset: 0;
       display: none;
       place-items: center;
-      font-size: 90px;
+      font-size: 92px;
       filter: drop-shadow(0 20px 35px rgba(0,0,0,.18));
+      animation: fallbackFloat 4s ease-in-out infinite;
     }
 
     .fallbackFace.show {
       display: grid;
+    }
+
+    @keyframes fallbackFloat {
+      0%,100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-10px);
+      }
     }
 
     .hint {
@@ -369,7 +390,7 @@
     <div class="top">
       <div id="statusPill" class="pill">
         <span class="dot"></span>
-        <span id="statusText">Lade Avatar...</span>
+        <span id="statusText">Lade App...</span>
       </div>
     </div>
 
@@ -401,14 +422,7 @@
 
   <script type="module">
     import * as THREE from 'three';
-    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-    import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-    import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
-
-    const AVATAR_ZIPS = [
-      '/uploads_files_4123772_FBX.zip',
-      '/uploads_files_4123772_OBJ.zip'
-    ];
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
     const DEFAULT_INSTRUCTIONS =
       'Du bist Simons deutscher Voice-Agent. Sprich kurz, klar, nüchtern und trocken-humorig. Sprich mit deutscher Aussprache und deutscher Satzmelodie. Keine englischen Füllwörter. Keine KI-Floskeln. Maximal 1 bis 3 Sätze.';
@@ -447,20 +461,18 @@
     let avatarRoot;
     let loadedAvatar = null;
     let morphTargets = [];
-    let bones = {
-      head: null,
-      neck: null,
-      spine: null,
-      jaw: null,
-      leftArm: null,
-      rightArm: null
-    };
+    let bones = {};
     let speakingEnergy = 0;
 
     initThree();
     loadAvatar();
     loadConfig();
-    setTimeout(() => connect().catch(() => startModal.classList.add('show')), 500);
+
+    setTimeout(() => {
+      connect().catch(() => {
+        startModal.classList.add('show');
+      });
+    }, 600);
 
     function setStatus(text, mode = '') {
       statusText.textContent = text;
@@ -513,11 +525,6 @@
         if (!res.ok) return;
 
         const config = await res.json();
-
-        if (config.avatarScale && avatarRoot) {
-          avatarRoot.scale.multiplyScalar(Number(config.avatarScale) || 1);
-        }
-
         document.body.classList.toggle('dark', config.theme === 'dark');
       } catch (_) {}
     }
@@ -526,7 +533,7 @@
       scene = new THREE.Scene();
 
       camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
-      camera.position.set(0, 1.35, 5.2);
+      camera.position.set(0, 1.3, 5.2);
 
       renderer = new THREE.WebGLRenderer({
         alpha: true,
@@ -560,115 +567,75 @@
     }
 
     function resizeThree() {
-      const w = threeWrap.clientWidth || 400;
-      const h = threeWrap.clientHeight || 400;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
+      const width = threeWrap.clientWidth || 400;
+      const height = threeWrap.clientHeight || 400;
+
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
     }
 
     async function loadAvatar() {
       setStatus('Lade Avatar...');
 
-      for (const zipUrl of AVATAR_ZIPS) {
-        try {
-          const avatar = await loadAvatarZip(zipUrl);
-          if (avatar) {
-            useAvatar(avatar);
-            setStatus('Avatar geladen');
-            setTimeout(() => setStatus('Verbinde...'), 700);
-            return;
-          }
-        } catch (error) {
-          console.warn('Avatar load failed:', zipUrl, error);
+      const timer = setTimeout(() => {
+        if (!loadedAvatar) {
+          showFallbackAvatar('Avatar lädt zu lange');
         }
-      }
+      }, 7000);
 
+      try {
+        const head = await fetch('/avatar/model.glb?v=' + Date.now(), {
+          method: 'HEAD'
+        });
+
+        if (!head.ok) {
+          throw new Error('public/avatar/model.glb fehlt noch.');
+        }
+
+        const loader = new GLTFLoader();
+
+        const gltf = await new Promise((resolve, reject) => {
+          loader.load(
+            '/avatar/model.glb?v=' + Date.now(),
+            resolve,
+            undefined,
+            reject
+          );
+        });
+
+        clearTimeout(timer);
+        useAvatar(gltf);
+        setStatus('Avatar geladen');
+        setTimeout(() => setStatus('Verbinde...'), 700);
+      } catch (error) {
+        clearTimeout(timer);
+        showFallbackAvatar(error.message || String(error));
+      }
+    }
+
+    function showFallbackAvatar(reason) {
+      console.warn('Avatar fallback:', reason);
       fallbackFace.classList.add('show');
       setStatus('Avatar-Fallback');
+      setTimeout(() => setStatus('Verbinde...'), 900);
     }
 
-    function normalizeName(name) {
-      return String(name || '')
-        .replace(/\\/g, '/')
-        .split('/')
-        .pop()
-        .toLowerCase();
-    }
-
-    async function loadAvatarZip(zipUrl) {
-      const res = await fetch(zipUrl + '?v=' + Date.now());
-
-      if (!res.ok) {
-        throw new Error('ZIP nicht gefunden: ' + zipUrl);
-      }
-
-      const buffer = await res.arrayBuffer();
-      const zip = await JSZip.loadAsync(buffer);
-      const files = Object.values(zip.files).filter((file) => !file.dir);
-
-      const blobUrls = new Map();
-
-      for (const file of files) {
-        const lower = file.name.toLowerCase();
-
-        if (/\.(png|jpg|jpeg|webp)$/i.test(lower)) {
-          const blob = await file.async('blob');
-          blobUrls.set(normalizeName(file.name), URL.createObjectURL(blob));
-        }
-      }
-
-      const manager = new THREE.LoadingManager();
-
-      manager.setURLModifier((url) => {
-        const key = normalizeName(url);
-        return blobUrls.get(key) || url;
-      });
-
-      const fbxFile = files.find((file) => file.name.toLowerCase().endsWith('.fbx'));
-
-      if (fbxFile) {
-        const arrayBuffer = await fbxFile.async('arraybuffer');
-        const loader = new FBXLoader(manager);
-        return loader.parse(arrayBuffer, '');
-      }
-
-      const objFile = files.find((file) => file.name.toLowerCase().endsWith('.obj'));
-
-      if (objFile) {
-        const objText = await objFile.async('text');
-        const objLoader = new OBJLoader(manager);
-        const mtlFile = files.find((file) => file.name.toLowerCase().endsWith('.mtl'));
-
-        if (mtlFile) {
-          const mtlText = await mtlFile.async('text');
-          const mtlLoader = new MTLLoader(manager);
-          const materials = mtlLoader.parse(mtlText, '');
-          materials.preload();
-          objLoader.setMaterials(materials);
-        }
-
-        return objLoader.parse(objText);
-      }
-
-      throw new Error('Keine FBX/OBJ-Datei in ZIP gefunden.');
-    }
-
-    function useAvatar(object) {
-      loadedAvatar = object;
+    function useAvatar(gltf) {
+      loadedAvatar = gltf.scene;
       fallbackFace.classList.remove('show');
 
       avatarRoot.clear();
-      avatarRoot.add(object);
+      avatarRoot.add(gltf.scene);
 
-      object.traverse((child) => {
+      gltf.scene.traverse((child) => {
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
 
           if (child.material) {
             if (Array.isArray(child.material)) {
-              child.material.forEach((mat) => prepareMaterial(mat));
+              child.material.forEach(prepareMaterial);
             } else {
               prepareMaterial(child.material);
             }
@@ -677,7 +644,11 @@
           if (child.morphTargetDictionary && child.morphTargetInfluences) {
             for (const [name, index] of Object.entries(child.morphTargetDictionary)) {
               if (/jaw|mouth|open|aa|oh|viseme|vrc|a_|e_|i_|o_|u_/i.test(name)) {
-                morphTargets.push({ mesh: child, index, name });
+                morphTargets.push({
+                  mesh: child,
+                  index,
+                  name
+                });
               }
             }
           }
@@ -695,74 +666,73 @@
         }
       });
 
-      fitAvatar(object);
+      fitAvatar(gltf.scene);
 
-      if (object.animations && object.animations.length) {
-        mixer = new THREE.AnimationMixer(object);
-        const idleClip = object.animations[0];
-        mixer.clipAction(idleClip).play();
+      if (gltf.animations && gltf.animations.length) {
+        mixer = new THREE.AnimationMixer(gltf.scene);
+        mixer.clipAction(gltf.animations[0]).play();
       }
     }
 
-    function prepareMaterial(mat) {
-      mat.side = THREE.DoubleSide;
+    function prepareMaterial(material) {
+      material.side = THREE.DoubleSide;
 
-      if ('roughness' in mat) mat.roughness = 0.58;
-      if ('metalness' in mat) mat.metalness = 0.05;
+      if ('roughness' in material) material.roughness = 0.58;
+      if ('metalness' in material) material.metalness = 0.05;
 
-      mat.needsUpdate = true;
+      material.needsUpdate = true;
     }
 
     function fitAvatar(object) {
       const box = new THREE.Box3().setFromObject(object);
       const size = new THREE.Vector3();
-      box.getSize(size);
+      const center = new THREE.Vector3();
 
-      const maxDim = Math.max(size.x, size.y, size.z) || 1;
-      const scale = 2.65 / maxDim;
+      box.getSize(size);
+      box.getCenter(center);
+
+      const maxDimension = Math.max(size.x, size.y, size.z) || 1;
+      const scale = 2.7 / maxDimension;
 
       object.scale.setScalar(scale);
 
       const scaledBox = new THREE.Box3().setFromObject(object);
-      const center = new THREE.Vector3();
-      scaledBox.getCenter(center);
+      const scaledCenter = new THREE.Vector3();
 
-      object.position.x -= center.x;
-      object.position.z -= center.z;
+      scaledBox.getCenter(scaledCenter);
+
+      object.position.x -= scaledCenter.x;
+      object.position.z -= scaledCenter.z;
       object.position.y -= scaledBox.min.y;
       object.position.y -= 1.35;
-
-      avatarRoot.rotation.y = 0;
     }
 
     function animateThree() {
       requestAnimationFrame(animateThree);
 
       const delta = clock.getDelta();
-      const t = clock.elapsedTime;
+      const time = clock.elapsedTime;
 
-      if (mixer) {
-        mixer.update(delta);
-      }
+      if (mixer) mixer.update(delta);
 
-      const idle = Math.sin(t * 1.35) * 0.035;
+      const idle = Math.sin(time * 1.35) * 0.035;
       const talk = speakingEnergy;
 
       avatarRoot.position.y = idle + talk * 0.06;
-      avatarRoot.rotation.y = Math.sin(t * 0.65) * 0.045 + talk * 0.045;
-      avatarRoot.rotation.x = Math.sin(t * 0.55) * 0.015;
+      avatarRoot.rotation.y = Math.sin(time * 0.65) * 0.045 + talk * 0.045;
+      avatarRoot.rotation.x = Math.sin(time * 0.55) * 0.015;
 
       if (bones.head) {
-        bones.head.rotation.y = Math.sin(t * 0.8) * 0.08 + talk * 0.08;
-        bones.head.rotation.x = Math.sin(t * 0.7) * 0.035 - talk * 0.05;
+        bones.head.rotation.y = Math.sin(time * 0.8) * 0.08 + talk * 0.08;
+        bones.head.rotation.x = Math.sin(time * 0.7) * 0.035 - talk * 0.05;
       }
 
       if (bones.neck) {
-        bones.neck.rotation.y = Math.sin(t * 0.6) * 0.04;
+        bones.neck.rotation.y = Math.sin(time * 0.6) * 0.04;
       }
 
       if (bones.spine) {
-        bones.spine.rotation.z = Math.sin(t * 0.55) * 0.025;
+        bones.spine.rotation.z = Math.sin(time * 0.55) * 0.025;
       }
 
       if (bones.jaw) {
@@ -770,11 +740,11 @@
       }
 
       if (bones.leftArm) {
-        bones.leftArm.rotation.z = Math.sin(t * 1.2) * 0.04 + talk * 0.12;
+        bones.leftArm.rotation.z = Math.sin(time * 1.2) * 0.04 + talk * 0.12;
       }
 
       if (bones.rightArm) {
-        bones.rightArm.rotation.z = Math.sin(t * 1.1) * -0.04 - talk * 0.12;
+        bones.rightArm.rotation.z = Math.sin(time * 1.1) * -0.04 - talk * 0.12;
       }
 
       for (const target of morphTargets) {
@@ -789,7 +759,6 @@
 
       try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-
         if (!AudioContextClass) return;
 
         audioContext = audioContext || new AudioContextClass();
@@ -1114,42 +1083,6 @@
 
       if (delta > 55) openChat(true);
     }, { passive: true });
-
-    function openChat(open) {
-      chatSheet.classList.toggle('open', open);
-    }
-
-    function bubble(role, text) {
-      const el = document.createElement('div');
-      el.className = `bubble ${role}`;
-      el.textContent = text;
-      chatLog.appendChild(el);
-      chatLog.scrollTop = chatLog.scrollHeight;
-      return el;
-    }
-
-    function aiDelta(text) {
-      if (!currentAiBubble) currentAiBubble = bubble('ai', '');
-      currentAiBubble.textContent += text;
-      chatLog.scrollTop = chatLog.scrollHeight;
-    }
-
-    function speak() {
-      clearTimeout(stopSpeakingTimer);
-      root.classList.add('speaking');
-    }
-
-    function stopSoon() {
-      clearTimeout(stopSpeakingTimer);
-      stopSpeakingTimer = setTimeout(() => {
-        root.classList.remove('speaking');
-        speakingEnergy = 0;
-        document.documentElement.style.setProperty('--voice-lift', '0px');
-        document.documentElement.style.setProperty('--voice-glow', '.12');
-      }, 1400);
-    }
-
-    loadConfig();
   </script>
 </body>
 </html>
