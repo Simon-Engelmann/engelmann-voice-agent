@@ -4,16 +4,11 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "public/*FBX*.zip"
       - "public/*OBJ*.zip"
-      - "scripts/convert-avatar.py"
       - ".github/workflows/build-avatar.yml"
 
 permissions:
   contents: write
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-avatar:
@@ -26,41 +21,20 @@ jobs:
           persist-credentials: true
           fetch-depth: 0
 
-      - name: Install Blender
+      - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender unzip xvfb python3-numpy
+          sudo apt-get install -y unzip
+          npm install -g obj2gltf
 
-      - name: Inject numpy into Blender Python
+      - name: Convert OBJ ZIP to GLB
         run: |
-          NUMPY_PATH=$(python3 -c "import numpy; print(numpy.__path__[0])")
-          echo "Using numpy from: $NUMPY_PATH"
-          export PYTHONPATH="$NUMPY_PATH:$PYTHONPATH"
-          echo "PYTHONPATH=$PYTHONPATH" >> $GITHUB_ENV
-
-      - name: Show source assets
-        run: |
-          echo "Root files:"
-          find public -maxdepth 2 -type f | sort
-          echo "ZIP sizes:"
-          ls -lh public/*.zip || true
-
-      - name: Prepare OBJ-only conversion
-        run: |
-          rm -f public/*FBX*.zip public/*fbx*.zip
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('scripts/convert-avatar.py')
-          s = p.read_text()
-          s = s.replace("'EXEC_DEFAULT',\n                filepath=", "filepath=")
-          s = s.replace("'EXEC_DEFAULT',\n            filepath=", "filepath=")
-          s = s.replace('fbx_files = sorted(WORK_DIR.rglob("*.fbx"), key=lambda p: p.stat().st_size, reverse=True)\n    obj_files = sorted(WORK_DIR.rglob("*.obj"), key=lambda p: p.stat().st_size, reverse=True)\n\n    if fbx_files:\n        return fbx_files[0]\n\n    if obj_files:\n        return obj_files[0]', 'obj_files = sorted(WORK_DIR.rglob("*.obj"), key=lambda p: p.stat().st_size, reverse=True)\n    fbx_files = sorted(WORK_DIR.rglob("*.fbx"), key=lambda p: p.stat().st_size, reverse=True)\n\n    preferred = [x for x in obj_files if x.name.lower() in {"nurse.obj", "female_nurse.obj"}]\n    if preferred:\n        return preferred[0]\n\n    non_asset = [x for x in obj_files if "asset" not in x.name.lower()]\n    if non_asset:\n        return non_asset[0]\n\n    if obj_files:\n        return obj_files[0]\n\n    if fbx_files:\n        return fbx_files[0]')
-          p.write_text(s)
-          PY
-
-      - name: Convert avatar ZIP to GLB
-        run: |
-          xvfb-run -a blender -b --python scripts/convert-avatar.py
+          mkdir -p _avatar_work public/avatar
+          unzip -q public/uploads_files_4123772_OBJ.zip -d _avatar_work
+          OBJ_FILE=$(find _avatar_work -type f -iname 'NURSE.obj' | head -n 1)
+          if [ -z "$OBJ_FILE" ]; then OBJ_FILE=$(find _avatar_work -type f -iname '*.obj' | head -n 1); fi
+          echo "Selected OBJ: $OBJ_FILE"
+          obj2gltf -i "$OBJ_FILE" -o public/avatar/model.glb -b
 
       - name: Verify generated GLB
         run: |
@@ -68,20 +42,16 @@ jobs:
           ls -lh public/avatar/model.glb
           size=$(stat -c%s public/avatar/model.glb)
           echo "Avatar GLB size: $size bytes"
-          if [ "$size" -le 1000 ]; then
-            echo "Generated GLB is too small. Build failed."
-            exit 1
-          fi
+          if [ "$size" -le 1000 ]; then exit 1; fi
 
       - name: Commit generated GLB
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git pull --rebase origin main
           git add -f public/avatar/model.glb
           if git diff --cached --quiet; then
             echo "No avatar changes to commit."
           else
-            git commit -m "Build avatar GLB from uploaded assets"
+            git commit -m "Build avatar GLB from OBJ assets"
             git push origin HEAD:main
           fi
