@@ -45,6 +45,19 @@ jobs:
           echo "ZIP sizes:"
           ls -lh public/*.zip || true
 
+      - name: Prepare OBJ-only conversion
+        run: |
+          rm -f public/*FBX*.zip public/*fbx*.zip
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/convert-avatar.py')
+          s = p.read_text()
+          s = s.replace("'EXEC_DEFAULT',\n                filepath=", "filepath=")
+          s = s.replace("'EXEC_DEFAULT',\n            filepath=", "filepath=")
+          s = s.replace('fbx_files = sorted(WORK_DIR.rglob("*.fbx"), key=lambda p: p.stat().st_size, reverse=True)\n    obj_files = sorted(WORK_DIR.rglob("*.obj"), key=lambda p: p.stat().st_size, reverse=True)\n\n    if fbx_files:\n        return fbx_files[0]\n\n    if obj_files:\n        return obj_files[0]', 'obj_files = sorted(WORK_DIR.rglob("*.obj"), key=lambda p: p.stat().st_size, reverse=True)\n    fbx_files = sorted(WORK_DIR.rglob("*.fbx"), key=lambda p: p.stat().st_size, reverse=True)\n\n    preferred = [x for x in obj_files if x.name.lower() in {"nurse.obj", "female_nurse.obj"}]\n    if preferred:\n        return preferred[0]\n\n    non_asset = [x for x in obj_files if "asset" not in x.name.lower()]\n    if non_asset:\n        return non_asset[0]\n\n    if obj_files:\n        return obj_files[0]\n\n    if fbx_files:\n        return fbx_files[0]')
+          p.write_text(s)
+          PY
+
       - name: Convert avatar ZIP to GLB
         run: |
           xvfb-run -a blender -b --python scripts/convert-avatar.py
