@@ -12,6 +12,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-avatar:
     runs-on: ubuntu-latest
@@ -19,28 +22,46 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
 
       - name: Install Blender
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender unzip
+          sudo apt-get install -y blender unzip xvfb
+
+      - name: Show source assets
+        run: |
+          echo "Root files:"
+          find public -maxdepth 2 -type f | sort
+          echo "ZIP sizes:"
+          ls -lh public/*.zip || true
 
       - name: Convert avatar ZIP to GLB
         run: |
-          blender -b --python scripts/convert-avatar.py
+          xvfb-run -a blender -b --python scripts/convert-avatar.py
 
-      - name: Show generated files
+      - name: Verify generated GLB
         run: |
-          ls -lah public/avatar || true
+          test -f public/avatar/model.glb
+          ls -lh public/avatar/model.glb
+          size=$(stat -c%s public/avatar/model.glb)
+          echo "Avatar GLB size: $size bytes"
+          if [ "$size" -le 1000 ]; then
+            echo "Generated GLB is too small. Build failed."
+            exit 1
+          fi
 
       - name: Commit generated GLB
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add public/avatar/model.glb
+          git pull --rebase origin main
+          git add -f public/avatar/model.glb
           if git diff --cached --quiet; then
             echo "No avatar changes to commit."
           else
             git commit -m "Build avatar GLB from uploaded assets"
-            git push
+            git push origin HEAD:main
           fi
