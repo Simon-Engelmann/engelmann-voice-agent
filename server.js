@@ -14,7 +14,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2';
 const OPENAI_REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'coral';
 const SIMLI_API_KEY = process.env.SIMLI_API_KEY;
-const SIMLI_FACE_ID = process.env.SIMLI_FACE_ID;
+const SIMLI_FACE_ID = process.env.SIMLI_FACE_ID || 'tmp9i8bbq7c';
 const SIMLI_MAX_SESSION_LENGTH = Number(process.env.SIMLI_MAX_SESSION_LENGTH || 3600);
 const SIMLI_MAX_IDLE_TIME = Number(process.env.SIMLI_MAX_IDLE_TIME || 300);
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -99,22 +99,15 @@ async function apiFetch(urlPath, options) {
 }
 
 function authHeaders(secret, contentType) {
-  return {
-    ['Author' + 'ization']: ['Bear', 'er'].join('') + ' ' + secret,
-    'Content-Type': contentType
-  };
+  return { ['Author' + 'ization']: ['Bear', 'er'].join('') + ' ' + secret, 'Content-Type': contentType };
 }
 
 async function createRealtimeClientSecret(session) {
   const response = await apiFetch('/v1/realtime/client_secrets', {
     method: 'POST',
-    headers: {
-      ...authHeaders(OPENAI_API_KEY, 'application/json'),
-      'OpenAI-Safety-Identifier': 'engelmann-voice-agent'
-    },
+    headers: { ...authHeaders(OPENAI_API_KEY, 'application/json'), 'OpenAI-Safety-Identifier': 'engelmann-voice-agent' },
     body: JSON.stringify({ session })
   });
-
   const data = await response.json().catch(() => ({}));
   return { response, data };
 }
@@ -124,18 +117,15 @@ async function createSessionWithFallback(body) {
   let result = await createRealtimeClientSecret(session);
   const serializedError = JSON.stringify(result.data).toLowerCase();
   const voice = session.audio?.output?.voice;
-
   if (!result.response.ok && voice !== 'marin' && serializedError.includes('voice')) {
     session = makeRealtimeSession(body, 'marin');
     result = await createRealtimeClientSecret(session);
   }
-
   return { ...result, session };
 }
 
 app.post('/session', async (req, res) => {
   if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY missing on server.' });
-
   try {
     const { response, data, session } = await createSessionWithFallback(req.body || {});
     if (!response.ok) return res.status(response.status).json(data);
@@ -148,18 +138,11 @@ app.post('/session', async (req, res) => {
 app.post('/rtc-answer', async (req, res) => {
   if (!OPENAI_API_KEY) return res.status(500).send('OPENAI_API_KEY missing on server.');
   if (!req.body?.sdp) return res.status(400).send('Missing SDP offer.');
-
   try {
     const { response, data } = await createSessionWithFallback(req.body || {});
     const ephemeralKey = data.value || data?.client_secret?.value;
     if (!response.ok || !ephemeralKey) return res.status(response.status || 500).send(JSON.stringify(data));
-
-    const sdpResponse = await apiFetch('/v1/realtime/calls', {
-      method: 'POST',
-      headers: authHeaders(ephemeralKey, 'application/sdp'),
-      body: req.body.sdp
-    });
-
+    const sdpResponse = await apiFetch('/v1/realtime/calls', { method: 'POST', headers: authHeaders(ephemeralKey, 'application/sdp'), body: req.body.sdp });
     const answer = await sdpResponse.text();
     res.status(sdpResponse.status).type('application/sdp').send(answer);
   } catch (error) {
@@ -168,39 +151,23 @@ app.post('/rtc-answer', async (req, res) => {
 });
 
 app.post('/simli/session', async (req, res) => {
-  if (!SIMLI_API_KEY || !SIMLI_FACE_ID) {
-    return res.status(501).json({
-      enabled: false,
-      error: 'SIMLI_API_KEY or SIMLI_FACE_ID missing on server.'
-    });
-  }
-
+  if (!SIMLI_API_KEY) return res.status(501).json({ enabled: false, error: 'SIMLI_API_KEY missing on server.' });
   try {
+    const faceId = req.body?.faceId || SIMLI_FACE_ID;
     const response = await fetch('https://api.simli.ai/compose/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-simli-api-key': SIMLI_API_KEY
-      },
+      headers: { 'Content-Type': 'application/json', 'x-simli-api-key': SIMLI_API_KEY },
       body: JSON.stringify({
-        faceId: req.body?.faceId || SIMLI_FACE_ID,
-        apiVersion: 'v2',
+        faceId,
         handleSilence: false,
         maxSessionLength: Number(req.body?.maxSessionLength || SIMLI_MAX_SESSION_LENGTH),
         maxIdleTime: Number(req.body?.maxIdleTime || SIMLI_MAX_IDLE_TIME),
-        audioInputFormat: 'pcm16'
+        model: req.body?.model || 'fasttalk'
       })
     });
-
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return res.status(response.status).json(data);
-
-    return res.json({
-      enabled: true,
-      session_token: data.session_token,
-      faceId: req.body?.faceId || SIMLI_FACE_ID,
-      mode: 'livekit'
-    });
+    return res.json({ enabled: true, session_token: data.session_token, faceId, mode: 'livekit' });
   } catch (error) {
     return res.status(500).json({ enabled: false, error: String(error) });
   }
@@ -208,11 +175,8 @@ app.post('/simli/session', async (req, res) => {
 
 app.get('/simli/ice', async (_req, res) => {
   if (!SIMLI_API_KEY) return res.status(501).json({ enabled: false, error: 'SIMLI_API_KEY missing on server.' });
-
   try {
-    const response = await fetch('https://api.simli.ai/compose/ice', {
-      headers: { 'x-simli-api-key': SIMLI_API_KEY }
-    });
+    const response = await fetch('https://api.simli.ai/compose/ice', { headers: { 'x-simli-api-key': SIMLI_API_KEY } });
     const data = await response.json().catch(() => []);
     res.status(response.status).json(data);
   } catch (error) {
