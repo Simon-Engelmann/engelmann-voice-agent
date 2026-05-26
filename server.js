@@ -13,6 +13,10 @@ const PORT = process.env.PORT || 8080;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2';
 const OPENAI_REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'coral';
+const SIMLI_API_KEY = process.env.SIMLI_API_KEY;
+const SIMLI_FACE_ID = process.env.SIMLI_FACE_ID;
+const SIMLI_MAX_SESSION_LENGTH = Number(process.env.SIMLI_MAX_SESSION_LENGTH || 3600);
+const SIMLI_MAX_IDLE_TIME = Number(process.env.SIMLI_MAX_IDLE_TIME || 300);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const VOICE_AGENT_INSTRUCTIONS = `
@@ -160,6 +164,59 @@ app.post('/rtc-answer', async (req, res) => {
     res.status(sdpResponse.status).type('application/sdp').send(answer);
   } catch (error) {
     res.status(500).send(String(error));
+  }
+});
+
+app.post('/simli/session', async (req, res) => {
+  if (!SIMLI_API_KEY || !SIMLI_FACE_ID) {
+    return res.status(501).json({
+      enabled: false,
+      error: 'SIMLI_API_KEY or SIMLI_FACE_ID missing on server.'
+    });
+  }
+
+  try {
+    const response = await fetch('https://api.simli.ai/compose/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-simli-api-key': SIMLI_API_KEY
+      },
+      body: JSON.stringify({
+        faceId: req.body?.faceId || SIMLI_FACE_ID,
+        apiVersion: 'v2',
+        handleSilence: false,
+        maxSessionLength: Number(req.body?.maxSessionLength || SIMLI_MAX_SESSION_LENGTH),
+        maxIdleTime: Number(req.body?.maxIdleTime || SIMLI_MAX_IDLE_TIME),
+        audioInputFormat: 'pcm16'
+      })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) return res.status(response.status).json(data);
+
+    return res.json({
+      enabled: true,
+      session_token: data.session_token,
+      faceId: req.body?.faceId || SIMLI_FACE_ID,
+      mode: 'livekit'
+    });
+  } catch (error) {
+    return res.status(500).json({ enabled: false, error: String(error) });
+  }
+});
+
+app.get('/simli/ice', async (_req, res) => {
+  if (!SIMLI_API_KEY) return res.status(501).json({ enabled: false, error: 'SIMLI_API_KEY missing on server.' });
+
+  try {
+    const response = await fetch('https://api.simli.ai/compose/ice', {
+      headers: { 'x-simli-api-key': SIMLI_API_KEY }
+    });
+    const data = await response.json().catch(() => []);
+    res.status(response.status).json(data);
+  } catch (error) {
+    res.status(500).json({ enabled: false, error: String(error) });
   }
 });
 
