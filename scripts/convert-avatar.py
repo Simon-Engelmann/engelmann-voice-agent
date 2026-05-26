@@ -32,6 +32,7 @@ def clean_dirs():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
+
 def find_zip_files():
     found = []
 
@@ -49,6 +50,7 @@ def find_zip_files():
     return unique
 
 
+
 def extract_zips(zip_files):
     for zip_path in zip_files:
         target = WORK_DIR / zip_path.stem
@@ -60,9 +62,11 @@ def extract_zips(zip_files):
             zf.extractall(target)
 
 
+
 def reset_scene():
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
+
 
 
 def choose_model_file():
@@ -78,23 +82,49 @@ def choose_model_file():
     return None
 
 
+
+def enable_importers():
+    try:
+        bpy.ops.preferences.addon_enable(module="io_scene_fbx")
+        log("FBX importer enabled")
+    except Exception as error:
+        log(f"FBX addon enable skipped: {error}")
+
+    try:
+        bpy.ops.preferences.addon_enable(module="io_scene_obj")
+        log("OBJ importer enabled")
+    except Exception as error:
+        log(f"OBJ addon enable skipped: {error}")
+
+
+
 def import_model(model_file):
     suffix = model_file.suffix.lower()
 
     log(f"Importing {model_file}")
 
     if suffix == ".fbx":
-        bpy.ops.import_scene.fbx(filepath=str(model_file))
+        bpy.ops.import_scene.fbx(
+            'EXEC_DEFAULT',
+            filepath=str(model_file.resolve())
+        )
         return
 
     if suffix == ".obj":
         if hasattr(bpy.ops.wm, "obj_import"):
-            bpy.ops.wm.obj_import(filepath=str(model_file))
+            bpy.ops.wm.obj_import(
+                'EXEC_DEFAULT',
+                filepath=str(model_file.resolve())
+            )
         else:
-            bpy.ops.import_scene.obj(filepath=str(model_file))
+            bpy.ops.import_scene.obj(
+                'EXEC_DEFAULT',
+                filepath=str(model_file.resolve())
+            )
         return
 
     raise RuntimeError(f"Unsupported model format: {model_file}")
+
 
 
 def prepare_materials():
@@ -116,6 +146,7 @@ def prepare_materials():
                     bsdf.inputs["Roughness"].default_value = 0.58
                 if "Metallic" in bsdf.inputs:
                     bsdf.inputs["Metallic"].default_value = 0.05
+
 
 
 def center_and_scale():
@@ -167,6 +198,7 @@ def center_and_scale():
     log(f"Centered and scaled avatar. scale={scale:.4f}")
 
 
+
 def add_lights():
     light_data = bpy.data.lights.new("KeyLight", type="AREA")
     light_data.energy = 650
@@ -182,6 +214,7 @@ def add_lights():
     fill = bpy.data.objects.new("FillLight", fill_data)
     bpy.context.collection.objects.link(fill)
     fill.location = (-3.0, 2.0, 3.0)
+
 
 
 def export_glb():
@@ -217,8 +250,10 @@ def export_glb():
     log(f"Exported {OUT_FILE} ({size_mb:.2f} MB)")
 
 
+
 def main():
     clean_dirs()
+    enable_importers()
 
     zip_files = find_zip_files()
 
