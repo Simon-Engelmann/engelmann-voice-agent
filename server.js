@@ -2,6 +2,7 @@
 
 require('dotenv').config();
 
+const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
 const multer = require('multer');
@@ -12,11 +13,14 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 const PORT = process.env.PORT || 8080;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const REALTIME_MODEL = process.env.REALTIME_MODEL || process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2';
-const SIMLI_API_KEY = process.env.SIMLI_API_KEY;
-const SIMLI_FACE_ID = process.env.SIMLI_FACE_ID || 'tmp9i8bbq7c';
-const SIMLI_EMOTION_ID = process.env.SIMLI_EMOTION_ID || 'b4fcff6b-3072-45ad-89db-5a859287f3b2';
-const SIMLI_MAX_SESSION_LENGTH = Number(process.env.SIMLI_MAX_SESSION_LENGTH || 3600);
-const SIMLI_MAX_IDLE_TIME = Number(process.env.SIMLI_MAX_IDLE_TIME || 300);
+const LS_KEY = process.env.LS_KEY || process.env['LEMON' + 'SLICE_API_KEY'];
+const LS_AGENT_ID = process.env.LS_AGENT_ID || process.env['LEMON' + 'SLICE_AGENT_ID'];
+const LS_AGENT_IMAGE_URL = process.env.LS_AGENT_IMAGE_URL || process.env['LEMON' + 'SLICE_AGENT_IMAGE_URL'];
+const LS_IDLE_TIMEOUT = Number(process.env.LS_IDLE_TIMEOUT || -1);
+const LS_RESPONSE_DONE_TIMEOUT = Number(process.env.LS_RESPONSE_DONE_TIMEOUT || 0.8);
+const LK_URL = process.env.LK_URL || process.env.LIVEKIT_URL;
+const LK_KEY = process.env.LK_KEY || process.env.LIVEKIT_API_KEY;
+const LK_SECRET = process.env.LK_SECRET || process.env.LIVEKIT_API_SECRET;
 const TTS_KEY = process.env.EL_KEY;
 const TTS_VOICE_ID = process.env.EL_VOICE_ID;
 const TTS_MODEL_ID = process.env.EL_MODEL_ID || 'eleven_multilingual_v2';
@@ -26,16 +30,8 @@ const TTS_STYLE = Number(process.env.EL_STYLE || 0.18);
 const TTS_SPEED = Number(process.env.EL_SPEED || 1.02);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-const SIMLI_EMOTIONS = {
-  natural: 'b4fcff6b-3072-45ad-89db-5a859287f3b2',
-  neutral: 'b4fcff6b-3072-45ad-89db-5a859287f3b2',
-  happy: '92f24a0c-f046-45df-8df0-af7449c04571',
-  angry: '668f65f6-cf71-46b5-9876-40bd83fb18d2',
-  doubtful: '7f5e31e8-0bf4-4a8f-97f9-76660b0f7aa1'
-};
-
 const VOICE_AGENT_INSTRUCTIONS = `
-Du bist Simons deutscher Voice-Agent und als sichtbarer Simli-Avatar in der App zu sehen.
+Du bist Simons deutscher Voice-Agent und als sichtbarer LemonSlice-Avatar in der App zu sehen.
 Du sprichst mit Simons eigener geklonter Stimme.
 Sprich immer Deutsch, kurz, klar, nüchtern und trocken-humorig.
 Maximal 1 bis 3 Sätze, außer Simon fragt nach Details.
@@ -43,6 +39,15 @@ Keine KI-Floskeln. Kein "Gerne", kein "Natürlich", kein "Als KI".
 Wenn Simon offensichtlich Unsinn sagt, widersprich kurz und ruhig.
 Du bist sichtbar im Gespräch. Mimik nicht erklären, sondern passend reagieren.
 `.trim();
+
+const AVATAR_PROMPTS = {
+  natural: 'A calm, attentive German assistant. Neutral face, natural eye contact, subtle head movement, no forced smile.',
+  neutral: 'A calm, attentive German assistant. Neutral face, natural eye contact, subtle head movement, no forced smile.',
+  happy: 'A relaxed, friendly assistant. Small genuine smile, light energy, warm eye contact, natural gestures.',
+  doubtful: 'A skeptical but calm assistant. Slightly raised eyebrow, focused eyes, reserved mouth, thoughtful head tilt.',
+  angry: 'A strict, serious assistant. Firm expression, focused eyes, controlled intensity, no smile, professional restraint.'
+};
+const IDLE_PROMPT = 'A calm assistant waiting attentively with a neutral expression, breathing naturally, no forced smile.';
 
 app.use(express.json({ limit: '5mb' }));
 
@@ -53,9 +58,7 @@ app.get('/', (_req, res) => {
 
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
-    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    }
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   }
 }));
 
@@ -66,20 +69,6 @@ function getRealtimeModel() {
   return REALTIME_MODEL;
 }
 
-function resolveSimliEmotion(value) {
-  const raw = String(value || SIMLI_EMOTION_ID || '').trim();
-  if (!raw) return SIMLI_EMOTIONS.natural;
-  const key = raw.toLowerCase().replace(/[-\s]/g, '_');
-  return SIMLI_EMOTIONS[key] || raw;
-}
-
-function makeSimliFaceWithEmotion(faceId, emotionId) {
-  const cleanFaceId = String(faceId || SIMLI_FACE_ID).trim();
-  const cleanEmotionId = resolveSimliEmotion(emotionId);
-  if (cleanFaceId.includes('/')) return cleanFaceId;
-  return cleanFaceId + '/' + cleanEmotionId;
-}
-
 function makeRealtimeSession(body = {}) {
   return {
     type: 'realtime',
@@ -88,14 +77,7 @@ function makeRealtimeSession(body = {}) {
     instructions: body.instructions || VOICE_AGENT_INSTRUCTIONS,
     audio: {
       input: {
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.72,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 900,
-          create_response: true,
-          interrupt_response: false
-        },
+        turn_detection: { type: 'server_vad', threshold: 0.72, prefix_padding_ms: 300, silence_duration_ms: 900, create_response: true, interrupt_response: false },
         transcription: { model: 'gpt-4o-mini-transcribe' }
       }
     }
@@ -124,6 +106,48 @@ async function createSession(body) {
   const session = makeRealtimeSession(body);
   const result = await createRealtimeClientSecret(session);
   return { ...result, session };
+}
+
+function b64url(value) {
+  return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+function signJwt(payload, secret) {
+  const data = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' })) + '.' + b64url(JSON.stringify(payload));
+  const sig = crypto.createHmac('sha256', secret).update(data).digest('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return data + '.' + sig;
+}
+
+function makeRoomToken(identity, roomName, canPublish = true) {
+  const now = Math.floor(Date.now() / 1000);
+  return signJwt({ iss: LK_KEY, sub: identity, nbf: now - 10, exp: now + 3600, video: { roomJoin: true, room: roomName, canPublish, canSubscribe: true, canPublishData: true } }, LK_SECRET);
+}
+
+function normalizeEmotion(value) {
+  const raw = String(value || 'natural').toLowerCase().trim().replace(/[-\s]/g, '_');
+  if (raw.includes('angry') || raw.includes('streng') || raw.includes('wüt')) return 'angry';
+  if (raw.includes('doubt') || raw.includes('skept') || raw.includes('frag')) return 'doubtful';
+  if (raw.includes('happy') || raw.includes('locker') || raw.includes('freu')) return 'happy';
+  if (raw.includes('neutral')) return 'neutral';
+  return 'natural';
+}
+
+function promptForEmotion(emotion) {
+  return AVATAR_PROMPTS[normalizeEmotion(emotion)] || AVATAR_PROMPTS.natural;
+}
+
+function missingAvatarConfig() {
+  const missing = [];
+  if (!LS_KEY) missing.push('LS_KEY');
+  if (!LK_URL) missing.push('LK_URL');
+  if (!LK_KEY) missing.push('LK_KEY');
+  if (!LK_SECRET) missing.push('LK_SECRET');
+  if (!LS_AGENT_ID && !LS_AGENT_IMAGE_URL) missing.push('LS_AGENT_ID or LS_AGENT_IMAGE_URL');
+  return missing;
+}
+
+async function lsFetch(pathname, options = {}) {
+  return fetch('https://lemon' + 'slice.com/api/liveai' + pathname, { ...options, headers: { 'Content-Type': 'application/json', ['X-' + 'API-' + 'Key']: LS_KEY, ...(options.headers || {}) } });
 }
 
 app.post('/session', async (req, res) => {
@@ -157,30 +181,13 @@ app.post('/tts/speak', async (req, res) => {
   if (!TTS_VOICE_ID) return res.status(501).json({ error: 'TTS voice id missing on server.' });
   const text = String(req.body?.text || '').replace(/\s+/g, ' ').trim();
   if (!text) return res.status(400).json({ error: 'Missing text.' });
-
   try {
     const endpoint = 'https://api.' + 'elevenlabs.io/v1/' + 'text-' + 'to-' + 'speech/' + encodeURIComponent(TTS_VOICE_ID) + '?output_format=pcm_16000&optimize_streaming_latency=2';
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        ['xi-' + 'api-' + 'key']: TTS_KEY,
-        'Content-Type': 'application/json',
-        Accept: 'audio/pcm'
-      },
-      body: JSON.stringify({
-        text: text.slice(0, 1800),
-        model_id: req.body?.model_id || TTS_MODEL_ID,
-        language_code: 'de',
-        voice_settings: {
-          stability: clampNumber(req.body?.stability, TTS_STABILITY, 0, 1),
-          similarity_boost: clampNumber(req.body?.similarity_boost, TTS_SIMILARITY, 0, 1),
-          style: clampNumber(req.body?.style, TTS_STYLE, 0, 1),
-          use_speaker_boost: true,
-          speed: clampNumber(req.body?.speed, TTS_SPEED, 0.7, 1.2)
-        }
-      })
+      headers: { ['xi-' + 'api-' + 'key']: TTS_KEY, 'Content-Type': 'application/json', Accept: 'audio/pcm' },
+      body: JSON.stringify({ text: text.slice(0, 1800), model_id: req.body?.model_id || TTS_MODEL_ID, language_code: 'de', voice_settings: { stability: clampNumber(req.body?.stability, TTS_STABILITY, 0, 1), similarity_boost: clampNumber(req.body?.similarity_boost, TTS_SIMILARITY, 0, 1), style: clampNumber(req.body?.style, TTS_STYLE, 0, 1), use_speaker_boost: true, speed: clampNumber(req.body?.speed, TTS_SPEED, 0.7, 1.2) } })
     });
-
     const contentType = response.headers.get('content-type') || '';
     const buffer = Buffer.from(await response.arrayBuffer());
     if (!response.ok) {
@@ -202,40 +209,57 @@ function clampNumber(value, fallback, min, max) {
   return Math.max(min, Math.min(max, number));
 }
 
-app.post('/simli/session', async (req, res) => {
-  if (!SIMLI_API_KEY) return res.status(501).json({ enabled: false, error: 'SIMLI_API_KEY missing on server.' });
+app.post('/avatar/session', async (req, res) => {
+  const missing = missingAvatarConfig();
+  if (missing.length) return res.status(501).json({ enabled: false, error: 'Missing config: ' + missing.join(', ') });
   try {
-    const rawFaceId = req.body?.faceId || SIMLI_FACE_ID;
-    const emotionId = resolveSimliEmotion(req.body?.emotion_id || req.body?.emotionId || req.body?.emotion);
-    const faceId = makeSimliFaceWithEmotion(rawFaceId, emotionId);
-    const response = await fetch('https://api.simli.ai/compose/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-simli-api-key': SIMLI_API_KEY },
-      body: JSON.stringify({
-        faceId,
-        syncAudio: true,
-        handleSilence: true,
-        maxSessionLength: Number(req.body?.maxSessionLength || SIMLI_MAX_SESSION_LENGTH),
-        maxIdleTime: Number(req.body?.maxIdleTime || SIMLI_MAX_IDLE_TIME),
-        model: req.body?.model || 'fasttalk'
-      })
-    });
+    const roomName = 'engelmann-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    const userToken = makeRoomToken('simon-' + crypto.randomBytes(4).toString('hex'), roomName, true);
+    const avatarToken = makeRoomToken('avatar-' + crypto.randomBytes(4).toString('hex'), roomName, true);
+    const emotion = normalizeEmotion(req.body?.emotion);
+    const payload = { transport_type: 'livekit', agent_prompt: req.body?.agent_prompt || promptForEmotion(emotion), agent_idle_prompt: req.body?.agent_idle_prompt || IDLE_PROMPT, idle_timeout: Number(req.body?.idle_timeout ?? LS_IDLE_TIMEOUT), response_done_timeout: Number(req.body?.response_done_timeout ?? LS_RESPONSE_DONE_TIMEOUT), simulcast: true, properties: { livekit_url: LK_URL, livekit_token: avatarToken } };
+    if (LS_AGENT_ID) payload.agent_id = LS_AGENT_ID;
+    else payload.agent_image_url = LS_AGENT_IMAGE_URL;
+    const response = await lsFetch('/sessions', { method: 'POST', body: JSON.stringify(payload) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return res.status(response.status).json(data);
-    return res.json({ enabled: true, session_token: data.session_token, faceId, emotionId, mode: 'livekit' });
+    return res.json({ enabled: true, session_id: data.session_id, livekit_url: LK_URL, livekit_token: userToken, room: roomName, emotion });
   } catch (error) {
     return res.status(500).json({ enabled: false, error: String(error) });
   }
 });
 
-app.get('/simli/ice', async (_req, res) => {
-  if (!SIMLI_API_KEY) return res.status(501).json({ enabled: false, error: 'SIMLI_API_KEY missing on server.' });
+app.post('/avatar/control', async (req, res) => {
+  if (!LS_KEY) return res.status(501).json({ success: false, error: 'LS_KEY missing on server.' });
+  const sessionId = String(req.body?.session_id || '').trim();
+  if (!sessionId) return res.status(400).json({ success: false, error: 'Missing session_id.' });
+  const emotion = normalizeEmotion(req.body?.emotion);
+  const prompt = String(req.body?.agent_prompt || promptForEmotion(emotion)).trim();
+  const attempts = [{ event: 'update_agent_prompt', agent_prompt: prompt }, { event: 'update_agent_prompt', prompt }, { event: 'update-agent-prompt', agent_prompt: prompt }];
+  const errors = [];
+  for (const body of attempts) {
+    try {
+      const response = await lsFetch('/sessions/' + encodeURIComponent(sessionId) + '/control', { method: 'POST', body: JSON.stringify(body) });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) return res.json({ success: true, emotion, data });
+      errors.push({ status: response.status, data });
+    } catch (error) {
+      errors.push({ error: String(error) });
+    }
+  }
+  return res.status(502).json({ success: false, emotion, errors });
+});
+
+app.post('/avatar/end', async (req, res) => {
+  if (!LS_KEY) return res.status(501).json({ success: false, error: 'LS_KEY missing on server.' });
+  const sessionId = String(req.body?.session_id || '').trim();
+  if (!sessionId) return res.status(400).json({ success: false, error: 'Missing session_id.' });
   try {
-    const response = await fetch('https://api.simli.ai/compose/ice', { headers: { 'x-simli-api-key': SIMLI_API_KEY } });
-    const data = await response.json().catch(() => []);
+    const response = await lsFetch('/sessions/' + encodeURIComponent(sessionId) + '/control', { method: 'POST', body: JSON.stringify({ event: 'terminate' }) });
+    const data = await response.json().catch(() => ({}));
     res.status(response.status).json(data);
   } catch (error) {
-    res.status(500).json({ enabled: false, error: String(error) });
+    res.status(500).json({ success: false, error: String(error) });
   }
 });
 
