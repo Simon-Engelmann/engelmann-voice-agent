@@ -18,6 +18,7 @@ const LS_AGENT_ID = process.env.LS_AGENT_ID || process.env['LEMON' + 'SLICE_AGEN
 const LS_AGENT_IMAGE_URL = process.env.LS_AGENT_IMAGE_URL || process.env['LEMON' + 'SLICE_AGENT_IMAGE_URL'];
 const LS_IDLE_TIMEOUT = Number(process.env.LS_IDLE_TIMEOUT || -1);
 const LS_RESPONSE_DONE_TIMEOUT = Number(process.env.LS_RESPONSE_DONE_TIMEOUT || 0.8);
+const LS_SIMULCAST = String(process.env.LS_SIMULCAST || 'false').toLowerCase() === 'true';
 const LK_URL = process.env.LK_URL || process.env.LIVEKIT_URL;
 const LK_KEY = process.env.LK_KEY || process.env.LIVEKIT_API_KEY;
 const LK_SECRET = process.env.LK_SECRET || process.env.LIVEKIT_API_SECRET;
@@ -120,7 +121,20 @@ function signJwt(payload, secret) {
 
 function makeRoomToken(identity, roomName, canPublish = true) {
   const now = Math.floor(Date.now() / 1000);
-  return signJwt({ iss: LK_KEY, sub: identity, nbf: now - 10, exp: now + 3600, video: { roomJoin: true, room: roomName, canPublish, canSubscribe: true, canPublishData: true } }, LK_SECRET);
+  return signJwt({
+    iss: LK_KEY,
+    sub: identity,
+    nbf: now - 10,
+    exp: now + 3600,
+    video: {
+      roomJoin: true,
+      roomCreate: true,
+      room: roomName,
+      canPublish,
+      canSubscribe: true,
+      canPublishData: true
+    }
+  }, LK_SECRET);
 }
 
 function normalizeEmotion(value) {
@@ -144,6 +158,16 @@ function missingAvatarConfig() {
   if (!LK_SECRET) missing.push('LK_SECRET');
   if (!LS_AGENT_ID && !LS_AGENT_IMAGE_URL) missing.push('LS_AGENT_ID or LS_AGENT_IMAGE_URL');
   return missing;
+}
+
+function safeHost(url) {
+  try { return new URL(url).host; } catch (_) { return String(url || '').slice(0, 60); }
+}
+
+async function readJsonOrText(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try { return JSON.parse(text); } catch (_) { return { raw: text.slice(0, 3000) }; }
 }
 
 async function lsFetch(pathname, options = {}) {
@@ -217,16 +241,71 @@ app.post('/avatar/session', async (req, res) => {
     const userToken = makeRoomToken('simon-' + crypto.randomBytes(4).toString('hex'), roomName, true);
     const avatarToken = makeRoomToken('avatar-' + crypto.randomBytes(4).toString('hex'), roomName, true);
     const emotion = normalizeEmotion(req.body?.emotion);
-    const payload = { transport_type: 'livekit', agent_prompt: req.body?.agent_prompt || promptForEmotion(emotion), agent_idle_prompt: req.body?.agent_idle_prompt || IDLE_PROMPT, idle_timeout: Number(req.body?.idle_timeout ?? LS_IDLE_TIMEOUT), response_done_timeout: Number(req.body?.response_done_timeout ?? LS_RESPONSE_DONE_TIMEOUT), simulcast: true, properties: { livekit_url: LK_URL, livekit_token: avatarToken } };
+    const payload = {
+      transport_type: 'livekit',
+      agent_prompt: req.body?.agent_prompt || promptForEmotion(emotion),
+      agent_idle_prompt: req.body?.agent_idle_prompt || IDLE_PROMPT,
+      idle_timeout: Number(req.body?.idle_timeout ?? LS_IDLE_TIMEOUT),
+      response_done_timeout: Number(req.body?.response_done_timeout ?? LS_RESPONSE_DONE_TIMEOUT),
+      simulcast: LS_SIMULCAST,
+      properties: { livekit_url: LK_URL, livekit_token: avatarToken }
+    };
     if (LS_AGENT_ID) payload.agent_id = LS_AGENT_ID;
     else payload.agent_image_url = LS_AGENT_IMAGE_URL;
     const response = await lsFetch('/sessions', { method: 'POST', body: JSON.stringify(payload) });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) return res.status(response.status).json(data);
-    return res.json({ enabled: true, session_id: data.session_id, livekit_url: LK_URL, livekit_token: userToken, room: roomName, emotion });
+    const data = await readJsonOrText(response);
+    if (!response.ok) return res.status(response.status).json({ enabled: false, error: 'LemonSlice create failed', status: response.status, details: data });
+    return res.json({
+      enabled: true,
+      session_id: data.session_id,
+      livekit_url: LK_URL,
+      livekit_token: userToken,
+      room: roomName,
+      emotion,
+      debug: {
+        lk_host: safeHost(LK_URL),
+        has_agent_id: Boolean(LS_AGENT_ID),
+        has_agent_image_url: Boolean(LS_AGENT_IMAGE_URL),
+        simulcast: LS_SIMULCAST,
+        idle_timeout: Number(req.body?.idle_timeout ?? LS_IDLE_TIMEOUT),
+        response_done_timeout: Number(req.body?.response_done_timeout ?? LS_RESPONSE_DONE_TIMEOUT),
+        lemon_create_response: data
+      }
+    });
   } catch (error) {
-    return res.status(500).json({ enabled: false, error: String(error) });
+    return res.status(500).json({ enabled: false, error: String(error), stack: process.env.NODE_ENV === 'production' ? undefined : error?.stack });
   }
+});
+
+app.get('/avatar/status/:sessionId', async (req, res) => {
+  if (!LS_KEY) return res.status(501).json({ ok: false, error: 'LS_KEY missing on server.' });
+  const sessionId = String(req.params.sessionId || '').trim();
+  if (!sessionId) return res.status(400).json({ ok: false, error: 'Missing session id.' });
+  try {
+    const response = await lsFetch('/sessions/' + encodeURIComponent(sessionId), { method: 'GET' });
+    const data = await readJsonOrText(response);
+    return res.status(response.status).json({ ok: response.ok, status: response.status, data });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: String(error) });
+  }
+});
+
+app.get('/avatar/debug', (_req, res) => {
+  res.json({
+    ok: true,
+    has_ls_key: Boolean(LS_KEY),
+    has_lk_url: Boolean(LK_URL),
+    lk_host: safeHost(LK_URL),
+    has_lk_key: Boolean(LK_KEY),
+    has_lk_secret: Boolean(LK_SECRET),
+    has_agent_id: Boolean(LS_AGENT_ID),
+    has_agent_image_url: Boolean(LS_AGENT_IMAGE_URL),
+    has_tts_key: Boolean(TTS_KEY),
+    has_tts_voice_id: Boolean(TTS_VOICE_ID),
+    ls_simulcast: LS_SIMULCAST,
+    ls_idle_timeout: LS_IDLE_TIMEOUT,
+    ls_response_done_timeout: LS_RESPONSE_DONE_TIMEOUT
+  });
 });
 
 app.post('/avatar/control', async (req, res) => {
@@ -240,11 +319,11 @@ app.post('/avatar/control', async (req, res) => {
   for (const body of attempts) {
     try {
       const response = await lsFetch('/sessions/' + encodeURIComponent(sessionId) + '/control', { method: 'POST', body: JSON.stringify(body) });
-      const data = await response.json().catch(() => ({}));
+      const data = await readJsonOrText(response);
       if (response.ok) return res.json({ success: true, emotion, data });
-      errors.push({ status: response.status, data });
+      errors.push({ status: response.status, data, body });
     } catch (error) {
-      errors.push({ error: String(error) });
+      errors.push({ error: String(error), body });
     }
   }
   return res.status(502).json({ success: false, emotion, errors });
@@ -256,7 +335,7 @@ app.post('/avatar/end', async (req, res) => {
   if (!sessionId) return res.status(400).json({ success: false, error: 'Missing session_id.' });
   try {
     const response = await lsFetch('/sessions/' + encodeURIComponent(sessionId) + '/control', { method: 'POST', body: JSON.stringify({ event: 'terminate' }) });
-    const data = await response.json().catch(() => ({}));
+    const data = await readJsonOrText(response);
     res.status(response.status).json(data);
   } catch (error) {
     res.status(500).json({ success: false, error: String(error) });
