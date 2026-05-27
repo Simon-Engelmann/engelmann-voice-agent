@@ -11,65 +11,37 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 
 const PORT = process.env.PORT || 8080;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2';
-const OPENAI_REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'coral';
+const REALTIME_MODEL = process.env.REALTIME_MODEL || process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2';
 const SIMLI_API_KEY = process.env.SIMLI_API_KEY;
 const SIMLI_FACE_ID = process.env.SIMLI_FACE_ID || 'tmp9i8bbq7c';
 const SIMLI_EMOTION_ID = process.env.SIMLI_EMOTION_ID || 'b4fcff6b-3072-45ad-89db-5a859287f3b2';
 const SIMLI_MAX_SESSION_LENGTH = Number(process.env.SIMLI_MAX_SESSION_LENGTH || 3600);
 const SIMLI_MAX_IDLE_TIME = Number(process.env.SIMLI_MAX_IDLE_TIME || 300);
+const TTS_KEY = process.env.EL_KEY;
+const TTS_VOICE_ID = process.env.EL_VOICE_ID;
+const TTS_MODEL_ID = process.env.EL_MODEL_ID || 'eleven_multilingual_v2';
+const TTS_STABILITY = Number(process.env.EL_STABILITY || 0.46);
+const TTS_SIMILARITY = Number(process.env.EL_SIMILARITY || 0.88);
+const TTS_STYLE = Number(process.env.EL_STYLE || 0.18);
+const TTS_SPEED = Number(process.env.EL_SPEED || 1.02);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const SIMLI_EMOTIONS = {
   natural: 'b4fcff6b-3072-45ad-89db-5a859287f3b2',
   neutral: 'b4fcff6b-3072-45ad-89db-5a859287f3b2',
-  natural_0: 'b4fcff6b-3072-45ad-89db-5a859287f3b2',
-  natural_1: '278fc3b6-b70e-4a2e-ba15-16f6a4e770d2',
-  natural_2: '6be22009-5406-4e83-be41-e70b8863d3dd',
-  natural_3: '8cb2eeac-b54f-4d8a-bc90-9eeb5f8e8311',
-  natural_4: '7713d99a-b786-4d62-9e4e-4c6f6f2ef2de',
-  natural_5: 'd985f836-e054-46c3-bcc1-a1010791b7e1',
-  natural_6: 'a8f318cf-efc4-4c80-a29a-e1a69bebca18',
-  natural_7: '011443f2-eefd-49fc-a76c-dd1d5f0c4a3d',
   happy: '92f24a0c-f046-45df-8df0-af7449c04571',
-  happy_0: '92f24a0c-f046-45df-8df0-af7449c04571',
-  happy_1: '7a65257c-25b3-4dc1-889d-ff8a3d51ee01',
-  happy_2: 'e6cebb46-e415-4a59-8f82-85fe36e5f1b1',
   angry: '668f65f6-cf71-46b5-9876-40bd83fb18d2',
-  angry_1: '668f65f6-cf71-46b5-9876-40bd83fb18d2',
-  doubtful: '7f5e31e8-0bf4-4a8f-97f9-76660b0f7aa1',
-  doubtful_0: '7f5e31e8-0bf4-4a8f-97f9-76660b0f7aa1',
-  doubtful_1: 'c24cd218-b056-4ad4-afc7-57574c4339c2'
+  doubtful: '7f5e31e8-0bf4-4a8f-97f9-76660b0f7aa1'
 };
 
 const VOICE_AGENT_INSTRUCTIONS = `
-Du bist Simons deutscher Voice-Agent.
-
-Sprache:
-- Sprich immer Deutsch, außer Simon verlangt ausdrücklich eine andere Sprache.
-- Nutze deutsche Aussprache und deutsche Satzmelodie.
-- Kein englischer Akzent, keine englischen Füllwörter.
-
-Kommunikation:
-- Antworte kurz, klar und nüchtern.
-- Maximal 1 bis 3 Sätze, außer Simon fragt nach Details.
-- Keine KI-Floskeln.
-- Kein "Gerne", kein "Natürlich", kein "Als KI".
-- Wenn Simon offensichtlich Unsinn sagt, widersprich kurz und ruhig.
-- Trockener Humor ist erlaubt, aber knapp.
-- Du bist locker, aber nicht albern.
-- Kein Vortrag.
-
-Konversation:
-- Lass Simon ausreden.
-- Unterbrich nicht aggressiv.
-- Reagiere schnell, aber stabil.
-- Wenn Simon dich unterbricht, gehe beim nächsten Turn auf das Neue ein.
-
-Begrüßung:
-- Wenn eine neue Session startet, begrüße Simon mit Vornamen.
-- Jedes Mal anders.
-- Kurz, locker, trockener Spruch.
+Du bist Simons deutscher Voice-Agent und als sichtbarer Simli-Avatar in der App zu sehen.
+Du sprichst mit Simons eigener geklonter Stimme.
+Sprich immer Deutsch, kurz, klar, nüchtern und trocken-humorig.
+Maximal 1 bis 3 Sätze, außer Simon fragt nach Details.
+Keine KI-Floskeln. Kein "Gerne", kein "Natürlich", kein "Als KI".
+Wenn Simon offensichtlich Unsinn sagt, widersprich kurz und ruhig.
+Du bist sichtbar im Gespräch. Mimik nicht erklären, sondern passend reagieren.
 `.trim();
 
 app.use(express.json({ limit: '5mb' }));
@@ -108,11 +80,11 @@ function makeSimliFaceWithEmotion(faceId, emotionId) {
   return cleanFaceId + '/' + cleanEmotionId;
 }
 
-function makeRealtimeSession(body = {}, voiceOverride) {
+function makeRealtimeSession(body = {}) {
   return {
     type: 'realtime',
     model: getRealtimeModel(),
-    output_modalities: ['audio'],
+    output_modalities: ['text'],
     instructions: body.instructions || VOICE_AGENT_INSTRUCTIONS,
     audio: {
       input: {
@@ -125,8 +97,7 @@ function makeRealtimeSession(body = {}, voiceOverride) {
           interrupt_response: false
         },
         transcription: { model: 'gpt-4o-mini-transcribe' }
-      },
-      output: { voice: voiceOverride || body.voice || OPENAI_REALTIME_VOICE }
+      }
     }
   };
 }
@@ -149,34 +120,28 @@ async function createRealtimeClientSecret(session) {
   return { response, data };
 }
 
-async function createSessionWithFallback(body) {
-  let session = makeRealtimeSession(body);
-  let result = await createRealtimeClientSecret(session);
-  const serializedError = JSON.stringify(result.data).toLowerCase();
-  const voice = session.audio?.output?.voice;
-  if (!result.response.ok && voice !== 'marin' && serializedError.includes('voice')) {
-    session = makeRealtimeSession(body, 'marin');
-    result = await createRealtimeClientSecret(session);
-  }
+async function createSession(body) {
+  const session = makeRealtimeSession(body);
+  const result = await createRealtimeClientSecret(session);
   return { ...result, session };
 }
 
 app.post('/session', async (req, res) => {
-  if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OPENAI_API_KEY missing on server.' });
+  if (!OPENAI_API_KEY) return res.status(500).json({ error: 'OpenAI key missing on server.' });
   try {
-    const { response, data, session } = await createSessionWithFallback(req.body || {});
+    const { response, data, session } = await createSession(req.body || {});
     if (!response.ok) return res.status(response.status).json(data);
-    return res.json({ ...data, client_secret: { value: data.value }, model: session.model, voice: session.audio.output.voice });
+    return res.json({ ...data, client_secret: { value: data.value }, model: session.model, output: 'text' });
   } catch (error) {
     return res.status(500).json({ error: 'Failed to create realtime client secret', details: String(error) });
   }
 });
 
 app.post('/rtc-answer', async (req, res) => {
-  if (!OPENAI_API_KEY) return res.status(500).send('OPENAI_API_KEY missing on server.');
+  if (!OPENAI_API_KEY) return res.status(500).send('OpenAI key missing on server.');
   if (!req.body?.sdp) return res.status(400).send('Missing SDP offer.');
   try {
-    const { response, data } = await createSessionWithFallback(req.body || {});
+    const { response, data } = await createSession(req.body || {});
     const ephemeralKey = data.value || data?.client_secret?.value;
     if (!response.ok || !ephemeralKey) return res.status(response.status || 500).send(JSON.stringify(data));
     const sdpResponse = await apiFetch('/v1/realtime/calls', { method: 'POST', headers: authHeaders(ephemeralKey, 'application/sdp'), body: req.body.sdp });
@@ -186,6 +151,56 @@ app.post('/rtc-answer', async (req, res) => {
     res.status(500).send(String(error));
   }
 });
+
+app.post('/tts/speak', async (req, res) => {
+  if (!TTS_KEY) return res.status(501).json({ error: 'TTS key missing on server.' });
+  if (!TTS_VOICE_ID) return res.status(501).json({ error: 'TTS voice id missing on server.' });
+  const text = String(req.body?.text || '').replace(/\s+/g, ' ').trim();
+  if (!text) return res.status(400).json({ error: 'Missing text.' });
+
+  try {
+    const endpoint = 'https://api.' + 'elevenlabs.io/v1/' + 'text-' + 'to-' + 'speech/' + encodeURIComponent(TTS_VOICE_ID) + '?output_format=pcm_16000&optimize_streaming_latency=2';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        ['xi-' + 'api-' + 'key']: TTS_KEY,
+        'Content-Type': 'application/json',
+        Accept: 'audio/pcm'
+      },
+      body: JSON.stringify({
+        text: text.slice(0, 1800),
+        model_id: req.body?.model_id || TTS_MODEL_ID,
+        language_code: 'de',
+        voice_settings: {
+          stability: clampNumber(req.body?.stability, TTS_STABILITY, 0, 1),
+          similarity_boost: clampNumber(req.body?.similarity_boost, TTS_SIMILARITY, 0, 1),
+          style: clampNumber(req.body?.style, TTS_STYLE, 0, 1),
+          use_speaker_boost: true,
+          speed: clampNumber(req.body?.speed, TTS_SPEED, 0.7, 1.2)
+        }
+      })
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (!response.ok) {
+      const message = contentType.includes('application/json') ? buffer.toString('utf8') : 'TTS error';
+      return res.status(response.status).json({ error: message });
+    }
+    res.setHeader('Content-Type', 'audio/pcm');
+    res.setHeader('X-Audio-Sample-Rate', '16000');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).send(buffer);
+  } catch (error) {
+    return res.status(500).json({ error: String(error) });
+  }
+});
+
+function clampNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
 
 app.post('/simli/session', async (req, res) => {
   if (!SIMLI_API_KEY) return res.status(501).json({ enabled: false, error: 'SIMLI_API_KEY missing on server.' });
