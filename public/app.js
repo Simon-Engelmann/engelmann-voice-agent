@@ -1,5 +1,29 @@
-const DEFAULT_INSTRUCTIONS = 'Du bist Simons deutscher Voice-Agent. Sprich kurz, klar, nüchtern und trocken-humorig. Sprich mit deutscher Aussprache und deutscher Satzmelodie. Keine englischen Füllwörter. Keine KI-Floskeln. Maximal 1 bis 3 Sätze.';
+const DEFAULT_INSTRUCTIONS = `
+Du bist Simons deutscher Voice-Agent und dein Gesicht ist als sichtbarer Simli-Avatar in der App zu sehen.
+
+Wichtig zum Avatar:
+- Der Nutzer sieht dein Gesicht, deine Mimik und deine Lippenbewegung.
+- Reagiere so, als wärst du sichtbar im Gespräch.
+- Deine Antworten dürfen nüchtern, trocken-humorig, skeptisch, zustimmend oder leicht genervt wirken, wenn es passt.
+- Sprich Emotionen nicht aus. Also nicht sagen: "Ich schaue jetzt skeptisch".
+- Nutze kurze, klare deutsche Sätze.
+- Maximal 1 bis 3 Sätze, außer Simon fragt nach Details.
+- Kein "Gerne", kein "Natürlich", kein "Als KI".
+- Wenn Simon offensichtlich Unsinn sagt, widersprich kurz und ruhig.
+- Trockener Humor ist erlaubt, aber knapp.
+`;
+
 const SIMLI_SDK_URL = 'https://esm.sh/simli-client@latest';
+const DEFAULT_SIMLI_MODEL = 'fasttalk';
+const DEFAULT_EMOTION = 'natural';
+
+const EMOTION_LABELS = {
+  natural: 'Neutral',
+  neutral: 'Neutral',
+  happy: 'Locker',
+  doubtful: 'Skeptisch',
+  angry: 'Streng'
+};
 
 const $ = (id) => document.getElementById(id);
 const root = $('root');
@@ -22,7 +46,10 @@ let dragStartY = 0;
 let currentAiBubble = null;
 let connecting = false;
 let stopSpeakingTimer = null;
+let responseTextBuffer = '';
+let responseEmotionLocked = false;
 
+let simliSdk = null;
 let simliClient = null;
 let simliAudio = null;
 let simliReady = false;
@@ -31,6 +58,11 @@ let pendingAssistantTrack = null;
 let manualBridgeStarted = false;
 let firstAssistantAudioSeen = false;
 let manualQueue = [];
+let currentEmotion = DEFAULT_EMOTION;
+let queuedEmotion = null;
+let switchingEmotion = false;
+let lastEmotionSwitchAt = 0;
+
 let audioContext = null;
 let assistantSource = null;
 let assistantProcessor = null;
@@ -43,7 +75,7 @@ startApp();
 
 function startApp() {
   setStatus('Lade Simli...');
-  initSimliSafe();
+  startSimli(DEFAULT_EMOTION, true);
   setTimeout(() => connect().catch(() => startModal.classList.add('show')), 650);
 }
 
@@ -85,7 +117,9 @@ function bubble(role, text) {
 function aiDelta(text) {
   if (!currentAiBubble) currentAiBubble = bubble('ai', '');
   currentAiBubble.textContent += text;
+  responseTextBuffer += text;
   chatLog.scrollTop = chatLog.scrollHeight;
+  autoEmotionFromAssistantText(responseTextBuffer);
 }
 
 function markSpeaking() {
@@ -102,12 +136,39 @@ function markSilentSoon() {
   }, 700);
 }
 
-async function initSimliSafe() {
+async function loadSimliSdk() {
+  if (simliSdk) return simliSdk;
+  simliSdk = await import(SIMLI_SDK_URL);
+  if (!simliSdk.SimliClient) throw new Error('SimliClient nicht gefunden.');
+  return simliSdk;
+}
+
+async function startSimli(emotion = DEFAULT_EMOTION, initial = false) {
+  const normalizedEmotion = normalizeEmotion(emotion);
+
+  if (switchingEmotion) {
+    queuedEmotion = normalizedEmotion;
+    return;
+  }
+
+  switchingEmotion = true;
+
   try {
+    if (!initial && normalizedEmotion === currentEmotion && simliReady) return;
+
+    const now = Date.now();
+    if (!initial && now - lastEmotionSwitchAt < 1300) {
+      queuedEmotion = normalizedEmotion;
+      return;
+    }
+
+    lastEmotionSwitchAt = now;
+    setStatus(initial ? 'Lade Simli...' : 'Mimik: ' + (EMOTION_LABELS[normalizedEmotion] || normalizedEmotion));
+
     const sessionResponse = await fetch('/simli/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'fasttalk' })
+      body: JSON.stringify({ model: DEFAULT_SIMLI_MODEL, emotion: normalizedEmotion })
     });
 
     const session = await sessionResponse.json().catch(() => ({}));
@@ -115,23 +176,32 @@ async function initSimliSafe() {
       throw new Error(session.error || session.message || JSON.stringify(session));
     }
 
-    const sdk = await import(SIMLI_SDK_URL);
+    const sdk = await loadSimliSdk();
     const SimliClient = sdk.SimliClient;
     const LogLevel = sdk.LogLevel || { INFO: 'info', DEBUG: 'debug' };
-    if (!SimliClient) throw new Error('SimliClient nicht gefunden.');
+
+    const oldClient = simliClient;
+    simliReady = false;
+
+    try {
+      if (oldClient?.stop) await oldClient.stop();
+      else if (oldClient?.close) await oldClient.close();
+    } catch (_) {}
 
     simliVideo.autoplay = true;
     simliVideo.playsInline = true;
     simliVideo.muted = true;
     simliVideo.setAttribute('playsinline', '');
 
-    simliAudio = document.createElement('audio');
-    simliAudio.id = 'simliAudio';
-    simliAudio.autoplay = true;
-    simliAudio.playsInline = true;
-    simliAudio.muted = false;
-    simliAudio.setAttribute('playsinline', '');
-    document.body.appendChild(simliAudio);
+    if (!simliAudio) {
+      simliAudio = document.createElement('audio');
+      simliAudio.id = 'simliAudio';
+      simliAudio.autoplay = true;
+      simliAudio.playsInline = true;
+      simliAudio.muted = false;
+      simliAudio.setAttribute('playsinline', '');
+      document.body.appendChild(simliAudio);
+    }
 
     simliClient = new SimliClient(
       session.session_token,
@@ -142,30 +212,43 @@ async function initSimliSafe() {
       'livekit'
     );
 
-    simliClient.on('start', () => {
-      simliReady = true;
-      simliFailed = false;
-      hideAvatarMessage();
-      simliVideo.classList.add('show');
-      if (remoteAudio) remoteAudio.muted = true;
-      setStatus('Simli aktiv', 'ok');
-      attachSimliToAssistantTrack();
-      flushManualQueue();
-    });
-
-    simliClient.on('speaking', () => markSpeaking());
-    simliClient.on('silent', () => markSilentSoon());
-    simliClient.on('stop', () => {
-      simliReady = false;
-      setStatus('Simli getrennt', 'bad');
-    });
-    simliClient.on('error', (message) => showSimliError(message));
-    simliClient.on('startup_error', (message) => showSimliError(message));
-
+    bindSimliEvents(simliClient, normalizedEmotion);
     await simliClient.start();
   } catch (error) {
     showSimliError(error?.message || String(error));
+  } finally {
+    switchingEmotion = false;
+    if (queuedEmotion && queuedEmotion !== currentEmotion) {
+      const next = queuedEmotion;
+      queuedEmotion = null;
+      setTimeout(() => startSimli(next, false), 250);
+    } else {
+      queuedEmotion = null;
+    }
   }
+}
+
+function bindSimliEvents(client, emotion) {
+  client.on('start', () => {
+    simliReady = true;
+    simliFailed = false;
+    currentEmotion = emotion;
+    hideAvatarMessage();
+    simliVideo.classList.add('show');
+    if (remoteAudio) remoteAudio.muted = true;
+    setStatus('Simli aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion), 'ok');
+    attachSimliToAssistantTrack();
+    flushManualQueue();
+  });
+
+  client.on('speaking', () => markSpeaking());
+  client.on('silent', () => markSilentSoon());
+  client.on('stop', () => {
+    simliReady = false;
+    if (!switchingEmotion) setStatus('Simli getrennt', 'bad');
+  });
+  client.on('error', (message) => showSimliError(message));
+  client.on('startup_error', (message) => showSimliError(message));
 }
 
 function showSimliError(message) {
@@ -178,6 +261,50 @@ function showSimliError(message) {
   console.warn('Simli error:', text);
 }
 
+function normalizeEmotion(value) {
+  const raw = String(value || DEFAULT_EMOTION).toLowerCase().trim().replace(/[\s-]/g, '_');
+  if (raw.includes('angry') || raw.includes('streng') || raw.includes('wüt')) return 'angry';
+  if (raw.includes('doubt') || raw.includes('skept') || raw.includes('frag')) return 'doubtful';
+  if (raw.includes('happy') || raw.includes('locker') || raw.includes('freu')) return 'happy';
+  if (raw.includes('neutral')) return 'neutral';
+  return 'natural';
+}
+
+function detectEmotion(text) {
+  const t = String(text || '').toLowerCase();
+
+  if (/\b(falsch|unsinn|quatsch|nein|kritisch|problem|fehler|gefährlich|stopp|nicht machen|das stimmt nicht|keine gute idee|das ist nicht korrekt)\b/.test(t)) {
+    return 'angry';
+  }
+
+  if (/\b(vielleicht|prüfen|unklar|skeptisch|zweifel|kommt darauf an|ich würde|nicht sicher|fraglich|sauberer wäre)\b/.test(t)) {
+    return 'doubtful';
+  }
+
+  if (/\b(gut|läuft|passt|super|sauber|perfekt|witz|kaffee|wach|stabil|klappt)\b/.test(t)) {
+    return 'happy';
+  }
+
+  return 'natural';
+}
+
+function autoEmotionFromAssistantText(text) {
+  if (!text || responseEmotionLocked || text.length < 18) return;
+  const nextEmotion = detectEmotion(text);
+
+  if (nextEmotion !== currentEmotion) {
+    responseEmotionLocked = true;
+    startSimli(nextEmotion, false);
+  }
+}
+
+function emotionFromUserText(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\b(funktioniert nicht|kaputt|fehler|falsch|nervt|schei|mist|warum|problem)\b/.test(t)) return 'doubtful';
+  if (/\b(super|gut|perfekt|läuft|danke|geil)\b/.test(t)) return 'happy';
+  return 'natural';
+}
+
 function attachSimliToAssistantTrack() {
   if (!simliClient || !simliReady || !pendingAssistantTrack || simliFailed) return;
 
@@ -185,7 +312,7 @@ function attachSimliToAssistantTrack() {
     if (typeof simliClient.listenToMediastreamTrack === 'function') {
       simliClient.listenToMediastreamTrack(pendingAssistantTrack);
       if (remoteAudio) remoteAudio.muted = true;
-      setStatus('Simli aktiv', 'ok');
+      setStatus('Simli aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion), 'ok');
       return;
     }
   } catch (error) {
@@ -364,7 +491,7 @@ async function connect() {
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') setStatus(simliReady ? 'Simli aktiv' : 'Sprich jetzt', 'ok');
+      if (pc.connectionState === 'connected') setStatus(simliReady ? 'Simli aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion) : 'Sprich jetzt', 'ok');
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') setStatus('Verbindung weg', 'bad');
     };
 
@@ -372,13 +499,13 @@ async function connect() {
 
     dc = pc.createDataChannel('oai-events');
     dc.onopen = () => {
-      setStatus(simliReady ? 'Simli aktiv' : 'Sprich jetzt', 'ok');
-      bubble('system', simliReady ? 'Simli aktiv. Stimme läuft über Avatar.' : 'Stimme läuft. Simli noch nicht bereit.');
+      setStatus(simliReady ? 'Simli aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion) : 'Sprich jetzt', 'ok');
+      bubble('system', simliReady ? 'Simli aktiv. Dynamische Mimik läuft.' : 'Stimme läuft. Simli noch nicht bereit.');
 
       const greetings = [
-        'Begrüße Simon kurz: Moin Simon. Ich bin wach. Mehr kann man technisch kaum verlangen.',
-        'Begrüße Simon kurz: Hi Simon. System läuft, Laune stabil, Rest verhandeln wir.',
-        'Begrüße Simon kurz: Simon, da bist du ja. Ich habe schon mal so getan, als wäre ich produktiv.'
+        'Begrüße Simon kurz: Moin Simon. Ich bin sichtbar wach. Gruselig effizient.',
+        'Begrüße Simon kurz: Hi Simon. Gesicht ist online, Würde noch im Ladezustand.',
+        'Begrüße Simon kurz: Simon, da bist du ja. Ich schaue professionell und hoffe, das reicht.'
       ];
 
       const greeting = greetings[Math.floor(Math.random() * greetings.length)];
@@ -432,8 +559,14 @@ function handleRealtime(raw) {
   try { msg = JSON.parse(raw); } catch (_) { return; }
   const type = msg.type || '';
 
+  if (type === 'response.created') {
+    responseTextBuffer = '';
+    responseEmotionLocked = false;
+    markSpeaking();
+  }
+
   if (type === 'input_audio_buffer.speech_started' || type === 'conversation.interrupted') clearSimliBuffer();
-  if (type === 'response.created' || type === 'response.audio.delta') markSpeaking();
+  if (type === 'response.audio.delta') markSpeaking();
   if (type === 'response.audio.delta' && msg.delta && !firstAssistantAudioSeen) {
     try { sendPcm16ToSimli(resamplePcm16(base64ToPcm16(msg.delta), 24000, 16000)); } catch (_) {}
   }
@@ -443,8 +576,14 @@ function handleRealtime(raw) {
   if (type === 'response.audio_transcript.done' || type === 'response.output_text.done' || type === 'response.done') {
     currentAiBubble = null;
     markSilentSoon();
+    const finalEmotion = detectEmotion(responseTextBuffer);
+    if (finalEmotion !== currentEmotion) startSimli(finalEmotion, false);
   }
-  if (type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) bubble('me', msg.transcript);
+  if (type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
+    bubble('me', msg.transcript);
+    const nextEmotion = emotionFromUserText(msg.transcript);
+    if (nextEmotion !== currentEmotion) startSimli(nextEmotion, false);
+  }
   if (type === 'error') bubble('system', msg.error?.message || JSON.stringify(msg));
 }
 
