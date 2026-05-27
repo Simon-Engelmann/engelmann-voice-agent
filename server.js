@@ -15,9 +15,32 @@ const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2';
 const OPENAI_REALTIME_VOICE = process.env.OPENAI_REALTIME_VOICE || 'coral';
 const SIMLI_API_KEY = process.env.SIMLI_API_KEY;
 const SIMLI_FACE_ID = process.env.SIMLI_FACE_ID || 'tmp9i8bbq7c';
+const SIMLI_EMOTION_ID = process.env.SIMLI_EMOTION_ID || 'b4fcff6b-3072-45ad-89db-5a859287f3b2';
 const SIMLI_MAX_SESSION_LENGTH = Number(process.env.SIMLI_MAX_SESSION_LENGTH || 3600);
 const SIMLI_MAX_IDLE_TIME = Number(process.env.SIMLI_MAX_IDLE_TIME || 300);
 const PUBLIC_DIR = path.join(__dirname, 'public');
+
+const SIMLI_EMOTIONS = {
+  natural: 'b4fcff6b-3072-45ad-89db-5a859287f3b2',
+  neutral: 'b4fcff6b-3072-45ad-89db-5a859287f3b2',
+  natural_0: 'b4fcff6b-3072-45ad-89db-5a859287f3b2',
+  natural_1: '278fc3b6-b70e-4a2e-ba15-16f6a4e770d2',
+  natural_2: '6be22009-5406-4e83-be41-e70b8863d3dd',
+  natural_3: '8cb2eeac-b54f-4d8a-bc90-9eeb5f8e8311',
+  natural_4: '7713d99a-b786-4d62-9e4e-4c6f6f2ef2de',
+  natural_5: 'd985f836-e054-46c3-bcc1-a1010791b7e1',
+  natural_6: 'a8f318cf-efc4-4c80-a29a-e1a69bebca18',
+  natural_7: '011443f2-eefd-49fc-a76c-dd1d5f0c4a3d',
+  happy: '92f24a0c-f046-45df-8df0-af7449c04571',
+  happy_0: '92f24a0c-f046-45df-8df0-af7449c04571',
+  happy_1: '7a65257c-25b3-4dc1-889d-ff8a3d51ee01',
+  happy_2: 'e6cebb46-e415-4a59-8f82-85fe36e5f1b1',
+  angry: '668f65f6-cf71-46b5-9876-40bd83fb18d2',
+  angry_1: '668f65f6-cf71-46b5-9876-40bd83fb18d2',
+  doubtful: '7f5e31e8-0bf4-4a8f-97f9-76660b0f7aa1',
+  doubtful_0: '7f5e31e8-0bf4-4a8f-97f9-76660b0f7aa1',
+  doubtful_1: 'c24cd218-b056-4ad4-afc7-57574c4339c2'
+};
 
 const VOICE_AGENT_INSTRUCTIONS = `
 Du bist Simons deutscher Voice-Agent.
@@ -69,6 +92,20 @@ app.get('/healthz', (_req, res) => res.status(200).json({ ok: true }));
 function getRealtimeModel() {
   if (!REALTIME_MODEL || REALTIME_MODEL === 'gpt-realtime') return 'gpt-realtime-2';
   return REALTIME_MODEL;
+}
+
+function resolveSimliEmotion(value) {
+  const raw = String(value || SIMLI_EMOTION_ID || '').trim();
+  if (!raw) return SIMLI_EMOTIONS.natural;
+  const key = raw.toLowerCase().replace(/[-\s]/g, '_');
+  return SIMLI_EMOTIONS[key] || raw;
+}
+
+function makeSimliFaceWithEmotion(faceId, emotionId) {
+  const cleanFaceId = String(faceId || SIMLI_FACE_ID).trim();
+  const cleanEmotionId = resolveSimliEmotion(emotionId);
+  if (cleanFaceId.includes('/')) return cleanFaceId;
+  return cleanFaceId + '/' + cleanEmotionId;
 }
 
 function makeRealtimeSession(body = {}, voiceOverride) {
@@ -153,13 +190,16 @@ app.post('/rtc-answer', async (req, res) => {
 app.post('/simli/session', async (req, res) => {
   if (!SIMLI_API_KEY) return res.status(501).json({ enabled: false, error: 'SIMLI_API_KEY missing on server.' });
   try {
-    const faceId = req.body?.faceId || SIMLI_FACE_ID;
+    const rawFaceId = req.body?.faceId || SIMLI_FACE_ID;
+    const emotionId = resolveSimliEmotion(req.body?.emotion_id || req.body?.emotionId || req.body?.emotion);
+    const faceId = makeSimliFaceWithEmotion(rawFaceId, emotionId);
     const response = await fetch('https://api.simli.ai/compose/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-simli-api-key': SIMLI_API_KEY },
       body: JSON.stringify({
         faceId,
-        handleSilence: false,
+        syncAudio: true,
+        handleSilence: true,
         maxSessionLength: Number(req.body?.maxSessionLength || SIMLI_MAX_SESSION_LENGTH),
         maxIdleTime: Number(req.body?.maxIdleTime || SIMLI_MAX_IDLE_TIME),
         model: req.body?.model || 'fasttalk'
@@ -167,7 +207,7 @@ app.post('/simli/session', async (req, res) => {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return res.status(response.status).json(data);
-    return res.json({ enabled: true, session_token: data.session_token, faceId, mode: 'livekit' });
+    return res.json({ enabled: true, session_token: data.session_token, faceId, emotionId, mode: 'livekit' });
   } catch (error) {
     return res.status(500).json({ enabled: false, error: String(error) });
   }
