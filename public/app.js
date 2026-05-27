@@ -1,10 +1,10 @@
 const DEFAULT_INSTRUCTIONS = `
 Du bist Simons deutscher Voice-Agent und dein Gesicht ist als sichtbarer Simli-Avatar in der App zu sehen.
+Du sprichst mit Simons eigener geklonter Stimme.
 
 Wichtig zum Avatar:
 - Der Nutzer sieht dein Gesicht, deine Mimik und deine Lippenbewegung.
 - Reagiere so, als wärst du sichtbar im Gespräch.
-- Deine Antworten dürfen nüchtern, trocken-humorig, skeptisch, zustimmend oder leicht genervt wirken, wenn es passt.
 - Sprich Emotionen nicht aus. Also nicht sagen: "Ich schaue jetzt skeptisch".
 - Nutze kurze, klare deutsche Sätze.
 - Maximal 1 bis 3 Sätze, außer Simon fragt nach Details.
@@ -16,6 +16,7 @@ Wichtig zum Avatar:
 const SIMLI_SDK_URL = 'https://esm.sh/simli-client@latest';
 const DEFAULT_SIMLI_MODEL = 'fasttalk';
 const DEFAULT_EMOTION = 'natural';
+const PCM_SAMPLE_RATE = 16000;
 
 const EMOTION_LABELS = {
   natural: 'Neutral',
@@ -41,7 +42,6 @@ const simliVideo = $('simliVideo');
 
 let pc = null;
 let dc = null;
-let remoteAudio = null;
 let dragStartY = 0;
 let currentAiBubble = null;
 let connecting = false;
@@ -54,19 +54,16 @@ let simliClient = null;
 let simliAudio = null;
 let simliReady = false;
 let simliFailed = false;
-let pendingAssistantTrack = null;
-let manualBridgeStarted = false;
-let firstAssistantAudioSeen = false;
-let manualQueue = [];
 let currentEmotion = DEFAULT_EMOTION;
 let queuedEmotion = null;
 let switchingEmotion = false;
 let lastEmotionSwitchAt = 0;
+let manualQueue = [];
 
 let audioContext = null;
-let assistantSource = null;
-let assistantProcessor = null;
-let assistantSilenceGain = null;
+let activeTtsSource = null;
+let ttsTimers = [];
+let isSpeakingTts = false;
 
 window.addEventListener('error', (event) => console.warn(event.error || event.message));
 window.addEventListener('unhandledrejection', (event) => console.warn(event.reason));
@@ -74,7 +71,7 @@ window.addEventListener('unhandledrejection', (event) => console.warn(event.reas
 startApp();
 
 function startApp() {
-  setStatus('Lade Simli...');
+  setStatus('Lade Avatar...');
   startSimli(DEFAULT_EMOTION, true);
   setTimeout(() => connect().catch(() => startModal.classList.add('show')), 650);
 }
@@ -128,12 +125,13 @@ function markSpeaking() {
   root.style.setProperty('--pulse', '.28');
 }
 
-function markSilentSoon() {
+function markSilentSoon(delay = 700) {
   clearTimeout(stopSpeakingTimer);
   stopSpeakingTimer = setTimeout(() => {
+    if (isSpeakingTts) return;
     stage.classList.remove('speaking');
     root.style.setProperty('--pulse', '.12');
-  }, 700);
+  }, delay);
 }
 
 async function loadSimliSdk() {
@@ -163,7 +161,7 @@ async function startSimli(emotion = DEFAULT_EMOTION, initial = false) {
     }
 
     lastEmotionSwitchAt = now;
-    setStatus(initial ? 'Lade Simli...' : 'Mimik: ' + (EMOTION_LABELS[normalizedEmotion] || normalizedEmotion));
+    setStatus(initial ? 'Lade Avatar...' : 'Mimik: ' + (EMOTION_LABELS[normalizedEmotion] || normalizedEmotion));
 
     const sessionResponse = await fetch('/simli/session', {
       method: 'POST',
@@ -179,7 +177,6 @@ async function startSimli(emotion = DEFAULT_EMOTION, initial = false) {
     const sdk = await loadSimliSdk();
     const SimliClient = sdk.SimliClient;
     const LogLevel = sdk.LogLevel || { INFO: 'info', DEBUG: 'debug' };
-
     const oldClient = simliClient;
     simliReady = false;
 
@@ -198,7 +195,7 @@ async function startSimli(emotion = DEFAULT_EMOTION, initial = false) {
       simliAudio.id = 'simliAudio';
       simliAudio.autoplay = true;
       simliAudio.playsInline = true;
-      simliAudio.muted = false;
+      simliAudio.muted = true;
       simliAudio.setAttribute('playsinline', '');
       document.body.appendChild(simliAudio);
     }
@@ -235,9 +232,7 @@ function bindSimliEvents(client, emotion) {
     currentEmotion = emotion;
     hideAvatarMessage();
     simliVideo.classList.add('show');
-    if (remoteAudio) remoteAudio.muted = true;
-    setStatus('Simli aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion), 'ok');
-    attachSimliToAssistantTrack();
+    setStatus('Avatar aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion), 'ok');
     flushManualQueue();
   });
 
@@ -245,7 +240,7 @@ function bindSimliEvents(client, emotion) {
   client.on('silent', () => markSilentSoon());
   client.on('stop', () => {
     simliReady = false;
-    if (!switchingEmotion) setStatus('Simli getrennt', 'bad');
+    if (!switchingEmotion) setStatus('Avatar getrennt', 'bad');
   });
   client.on('error', (message) => showSimliError(message));
   client.on('startup_error', (message) => showSimliError(message));
@@ -254,10 +249,9 @@ function bindSimliEvents(client, emotion) {
 function showSimliError(message) {
   simliFailed = true;
   simliReady = false;
-  if (remoteAudio) remoteAudio.muted = false;
-  const text = String(message || 'Unbekannter Simli Fehler');
-  showAvatarMessage('Simli nicht verbunden.\n' + text);
-  setStatus('Simli Fehler', 'bad');
+  const text = String(message || 'Unbekannter Avatar-Fehler');
+  showAvatarMessage('Avatar nicht verbunden.\n' + text);
+  setStatus('Avatar Fehler', 'bad');
   console.warn('Simli error:', text);
 }
 
@@ -272,26 +266,15 @@ function normalizeEmotion(value) {
 
 function detectEmotion(text) {
   const t = String(text || '').toLowerCase();
-
-  if (/\b(falsch|unsinn|quatsch|nein|kritisch|problem|fehler|gefährlich|stopp|nicht machen|das stimmt nicht|keine gute idee|das ist nicht korrekt)\b/.test(t)) {
-    return 'angry';
-  }
-
-  if (/\b(vielleicht|prüfen|unklar|skeptisch|zweifel|kommt darauf an|ich würde|nicht sicher|fraglich|sauberer wäre)\b/.test(t)) {
-    return 'doubtful';
-  }
-
-  if (/\b(gut|läuft|passt|super|sauber|perfekt|witz|kaffee|wach|stabil|klappt)\b/.test(t)) {
-    return 'happy';
-  }
-
+  if (/\b(falsch|unsinn|quatsch|nein|kritisch|problem|fehler|gefährlich|stopp|nicht machen|das stimmt nicht|keine gute idee|das ist nicht korrekt)\b/.test(t)) return 'angry';
+  if (/\b(vielleicht|prüfen|unklar|skeptisch|zweifel|kommt darauf an|ich würde|nicht sicher|fraglich|sauberer wäre)\b/.test(t)) return 'doubtful';
+  if (/\b(gut|läuft|passt|super|sauber|perfekt|witz|kaffee|wach|stabil|klappt)\b/.test(t)) return 'happy';
   return 'natural';
 }
 
 function autoEmotionFromAssistantText(text) {
   if (!text || responseEmotionLocked || text.length < 18) return;
   const nextEmotion = detectEmotion(text);
-
   if (nextEmotion !== currentEmotion) {
     responseEmotionLocked = true;
     startSimli(nextEmotion, false);
@@ -303,23 +286,6 @@ function emotionFromUserText(text) {
   if (/\b(funktioniert nicht|kaputt|fehler|falsch|nervt|schei|mist|warum|problem)\b/.test(t)) return 'doubtful';
   if (/\b(super|gut|perfekt|läuft|danke|geil)\b/.test(t)) return 'happy';
   return 'natural';
-}
-
-function attachSimliToAssistantTrack() {
-  if (!simliClient || !simliReady || !pendingAssistantTrack || simliFailed) return;
-
-  try {
-    if (typeof simliClient.listenToMediastreamTrack === 'function') {
-      simliClient.listenToMediastreamTrack(pendingAssistantTrack);
-      if (remoteAudio) remoteAudio.muted = true;
-      setStatus('Simli aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion), 'ok');
-      return;
-    }
-  } catch (error) {
-    console.warn('listenToMediastreamTrack failed:', error);
-  }
-
-  startManualAssistantAudioBridge(pendingAssistantTrack);
 }
 
 function clearSimliBuffer() {
@@ -335,7 +301,7 @@ function sendPcm16ToSimli(pcm16) {
   const bytes = new Uint8Array(pcm16.buffer, pcm16.byteOffset, pcm16.byteLength);
 
   if (!simliReady || !simliClient) {
-    if (manualQueue.length < 80) manualQueue.push(bytes);
+    if (manualQueue.length < 160) manualQueue.push(bytes);
     return;
   }
 
@@ -358,6 +324,89 @@ function flushManualQueue() {
   }
 }
 
+function scheduleSimliAudio(pcm16) {
+  clearSimliBuffer();
+  const chunkSamples = 320;
+  for (let offset = 0, index = 0; offset < pcm16.length; offset += chunkSamples, index++) {
+    const chunk = pcm16.slice(offset, Math.min(offset + chunkSamples, pcm16.length));
+    const timer = setTimeout(() => sendPcm16ToSimli(chunk), index * 20);
+    ttsTimers.push(timer);
+  }
+}
+
+function stopCurrentSpeech() {
+  try { activeTtsSource?.stop(); } catch (_) {}
+  activeTtsSource = null;
+  ttsTimers.forEach((timer) => clearTimeout(timer));
+  ttsTimers = [];
+  isSpeakingTts = false;
+  clearSimliBuffer();
+  markSilentSoon(50);
+}
+
+function getAudioContext() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  audioContext = audioContext || new AudioContextClass({ sampleRate: PCM_SAMPLE_RATE });
+  if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+  return audioContext;
+}
+
+function playPcm16(pcm16) {
+  const context = getAudioContext();
+  if (!context || !pcm16?.length) return;
+
+  const buffer = context.createBuffer(1, pcm16.length, PCM_SAMPLE_RATE);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < pcm16.length; i++) channel[i] = Math.max(-1, Math.min(1, pcm16[i] / 32768));
+
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(context.destination);
+  activeTtsSource = source;
+  isSpeakingTts = true;
+  markSpeaking();
+
+  source.onended = () => {
+    if (activeTtsSource === source) activeTtsSource = null;
+    isSpeakingTts = false;
+    markSilentSoon(250);
+  };
+
+  source.start();
+}
+
+async function speakTextWithClonedVoice(text) {
+  const cleanText = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!cleanText) return;
+
+  stopCurrentSpeech();
+  const emotion = detectEmotion(cleanText);
+  if (emotion !== currentEmotion) await startSimli(emotion, false);
+  setStatus('Spricht · eigene Stimme', 'ok');
+
+  try {
+    const response = await fetch('/tts/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: cleanText })
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(err || 'TTS Fehler ' + response.status);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const pcm16 = new Int16Array(arrayBuffer);
+    scheduleSimliAudio(pcm16);
+    playPcm16(pcm16);
+  } catch (error) {
+    bubble('system', 'Stimme Fehler: ' + String(error.message || error));
+    setStatus('Stimme Fehler', 'bad');
+  }
+}
+
 function base64ToPcm16(base64) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -368,23 +417,12 @@ function base64ToPcm16(base64) {
   return out;
 }
 
-function floatToPcm16(float32) {
-  const out = new Int16Array(float32.length);
-  for (let i = 0; i < float32.length; i++) {
-    const sample = Math.max(-1, Math.min(1, float32[i]));
-    out[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-  }
-  return out;
-}
-
 function resamplePcm16(input, inputRate, outputRate) {
   if (!input?.length) return new Int16Array(0);
   if (inputRate === outputRate) return input;
-
   const ratio = inputRate / outputRate;
   const outputLength = Math.max(1, Math.floor(input.length / ratio));
   const output = new Int16Array(outputLength);
-
   for (let i = 0; i < outputLength; i++) {
     const sourceIndex = i * ratio;
     const index = Math.floor(sourceIndex);
@@ -393,58 +431,7 @@ function resamplePcm16(input, inputRate, outputRate) {
     const b = input[index + 1] || a;
     output[i] = Math.round(a + (b - a) * fraction);
   }
-
   return output;
-}
-
-function startManualAssistantAudioBridge(track) {
-  if (manualBridgeStarted || !track) return;
-
-  try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-
-    audioContext = audioContext || new AudioContextClass();
-    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
-
-    const stream = new MediaStream([track]);
-    assistantSource = audioContext.createMediaStreamSource(stream);
-    assistantProcessor = audioContext.createScriptProcessor(2048, 1, 1);
-    assistantSilenceGain = audioContext.createGain();
-    assistantSilenceGain.gain.value = 0;
-
-    assistantProcessor.onaudioprocess = (event) => {
-      const samples = event.inputBuffer.getChannelData(0);
-      let level = 0;
-      for (let i = 0; i < samples.length; i += 8) level += Math.abs(samples[i]);
-      level = level / (samples.length / 8);
-      if (level > 0.006) {
-        markSpeaking();
-        firstAssistantAudioSeen = true;
-      }
-
-      const pcm = floatToPcm16(samples);
-      const pcm16k = resamplePcm16(pcm, audioContext.sampleRate || 48000, 16000);
-      sendPcm16ToSimli(pcm16k);
-    };
-
-    assistantSource.connect(assistantProcessor);
-    assistantProcessor.connect(assistantSilenceGain);
-    assistantSilenceGain.connect(audioContext.destination);
-    manualBridgeStarted = true;
-  } catch (error) {
-    console.warn('Manual Simli bridge failed:', error);
-  }
-}
-
-function stopManualBridge() {
-  try { assistantProcessor?.disconnect(); } catch (_) {}
-  try { assistantSource?.disconnect(); } catch (_) {}
-  try { assistantSilenceGain?.disconnect(); } catch (_) {}
-  assistantProcessor = null;
-  assistantSource = null;
-  assistantSilenceGain = null;
-  manualBridgeStarted = false;
 }
 
 async function fetchWithTimeout(url, options = {}, ms = 25000) {
@@ -468,30 +455,10 @@ async function connect() {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Mikrofon wird in diesem Browser nicht unterstützt.');
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-
-    remoteAudio = remoteAudio || document.createElement('audio');
-    remoteAudio.autoplay = true;
-    remoteAudio.playsInline = true;
-    remoteAudio.muted = simliReady;
-    remoteAudio.setAttribute('playsinline', '');
-    document.body.appendChild(remoteAudio);
-
     pc = new RTCPeerConnection();
 
-    pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      const remoteTrack = remoteStream?.getAudioTracks?.()[0];
-      pendingAssistantTrack = remoteTrack || null;
-
-      remoteAudio.srcObject = remoteStream;
-      remoteAudio.muted = simliReady;
-      remoteAudio.play().catch(() => {});
-
-      if (pendingAssistantTrack) attachSimliToAssistantTrack();
-    };
-
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') setStatus(simliReady ? 'Simli aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion) : 'Sprich jetzt', 'ok');
+      if (pc.connectionState === 'connected') setStatus('Bereit · eigene Stimme', 'ok');
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') setStatus('Verbindung weg', 'bad');
     };
 
@@ -499,8 +466,8 @@ async function connect() {
 
     dc = pc.createDataChannel('oai-events');
     dc.onopen = () => {
-      setStatus(simliReady ? 'Simli aktiv · ' + (EMOTION_LABELS[currentEmotion] || currentEmotion) : 'Sprich jetzt', 'ok');
-      bubble('system', simliReady ? 'Simli aktiv. Dynamische Mimik läuft.' : 'Stimme läuft. Simli noch nicht bereit.');
+      setStatus('Bereit · eigene Stimme', 'ok');
+      bubble('system', 'Bereit. Eigene Stimme aktiv.');
 
       const greetings = [
         'Begrüße Simon kurz: Moin Simon. Ich bin sichtbar wach. Gruselig effizient.',
@@ -510,7 +477,9 @@ async function connect() {
 
       const greeting = greetings[Math.floor(Math.random() * greetings.length)];
       setTimeout(() => {
-        try { dc.send(JSON.stringify({ type: 'response.create', response: { instructions: greeting } })); } catch (_) {}
+        try {
+          dc.send(JSON.stringify({ type: 'response.create', response: { modalities: ['text'], instructions: greeting } }));
+        } catch (_) {}
       }, 500);
     };
 
@@ -523,7 +492,7 @@ async function connect() {
     const sdpResp = await fetchWithTimeout('/rtc-answer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sdp: offer.sdp, instructions: DEFAULT_INSTRUCTIONS, voice: 'coral' })
+      body: JSON.stringify({ sdp: offer.sdp, instructions: DEFAULT_INSTRUCTIONS })
     }, 30000);
 
     const answer = await sdpResp.text();
@@ -538,8 +507,7 @@ async function connect() {
 
 function disconnect(show = true) {
   try { if (dc) dc.close(); if (pc) pc.close(); } catch (_) {}
-  stopManualBridge();
-  clearSimliBuffer();
+  stopCurrentSpeech();
   dc = null;
   pc = null;
   stage.classList.remove('speaking');
@@ -554,6 +522,20 @@ function fail(message) {
   disconnect(false);
 }
 
+function extractTextFromDone(msg) {
+  try {
+    const output = msg?.response?.output || [];
+    for (const item of output) {
+      const content = item?.content || [];
+      for (const part of content) {
+        if (part?.text) return part.text;
+        if (part?.transcript) return part.transcript;
+      }
+    }
+  } catch (_) {}
+  return '';
+}
+
 function handleRealtime(raw) {
   let msg;
   try { msg = JSON.parse(raw); } catch (_) { return; }
@@ -565,25 +547,37 @@ function handleRealtime(raw) {
     markSpeaking();
   }
 
-  if (type === 'input_audio_buffer.speech_started' || type === 'conversation.interrupted') clearSimliBuffer();
-  if (type === 'response.audio.delta') markSpeaking();
-  if (type === 'response.audio.delta' && msg.delta && !firstAssistantAudioSeen) {
-    try { sendPcm16ToSimli(resamplePcm16(base64ToPcm16(msg.delta), 24000, 16000)); } catch (_) {}
+  if (type === 'input_audio_buffer.speech_started' || type === 'conversation.interrupted') {
+    stopCurrentSpeech();
   }
-  if (type === 'response.audio.done') markSilentSoon();
+
+  if ((type === 'response.output_text.delta' || type === 'response.text.delta') && msg.delta) aiDelta(msg.delta);
   if (type === 'response.audio_transcript.delta' && msg.delta) aiDelta(msg.delta);
-  if (type === 'response.output_text.delta' && msg.delta) aiDelta(msg.delta);
-  if (type === 'response.audio_transcript.done' || type === 'response.output_text.done' || type === 'response.done') {
+
+  if (type === 'response.done') {
+    if (!responseTextBuffer) responseTextBuffer = extractTextFromDone(msg);
     currentAiBubble = null;
-    markSilentSoon();
-    const finalEmotion = detectEmotion(responseTextBuffer);
-    if (finalEmotion !== currentEmotion) startSimli(finalEmotion, false);
+    speakTextWithClonedVoice(responseTextBuffer);
   }
+
+  if (type === 'response.output_text.done' || type === 'response.text.done') {
+    currentAiBubble = null;
+  }
+
+  if (type === 'response.audio.delta' && msg.delta) {
+    try {
+      const pcm = resamplePcm16(base64ToPcm16(msg.delta), 24000, 16000);
+      scheduleSimliAudio(pcm);
+      playPcm16(pcm);
+    } catch (_) {}
+  }
+
   if (type === 'conversation.item.input_audio_transcription.completed' && msg.transcript) {
     bubble('me', msg.transcript);
     const nextEmotion = emotionFromUserText(msg.transcript);
     if (nextEmotion !== currentEmotion) startSimli(nextEmotion, false);
   }
+
   if (type === 'error') bubble('system', msg.error?.message || JSON.stringify(msg));
 }
 
@@ -592,9 +586,7 @@ function startTap(event) {
     event.preventDefault();
     event.stopPropagation();
   }
-  if (audioContext?.state === 'suspended') audioContext.resume().catch(() => {});
-  if (simliAudio) simliAudio.play().catch(() => {});
-  if (remoteAudio) remoteAudio.play().catch(() => {});
+  getAudioContext();
   connect();
 }
 
