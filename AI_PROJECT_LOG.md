@@ -19,6 +19,8 @@ LemonSlice AvatarSession -> Avatar Video/Audio -> derselbe LiveKit Room
 Browser -> zeigt Remote Avatar Video/Audio aus LiveKit
 ```
 
+Testlinks sollen ab jetzt Cache-bustende Pfade verwenden, z. B. `/test-YYYYMMDD-HHMM/`. `server.js` liefert fuer beliebige App-Pfade `index.html`, damit solche Links nicht 404en.
+
 Nicht mehr verwenden:
 
 ```text
@@ -29,7 +31,7 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
 ## Vorhandene relevante Dateien
 
 - `agent.mjs` - LiveKit Agents Worker mit OpenAI STT/LLM, ElevenLabs TTS und LemonSlice `AvatarSession`.
-- `server.js` - schlanker Express-Webserver mit statischer App, `/livekit-config` und `/livekit-token`.
+- `server.js` - schlanker Express-Webserver mit statischer App, `/livekit-config`, `/livekit-token` und App-Shell-Fallback fuer Testpfade.
 - `start.mjs` - startet Webserver und LiveKit Agent Worker gemeinsam und beendet beide bei Prozessfehlern.
 - `public/index.html` - LiveKit-only Browser-App; verbindet Raum, publiziert Mikrofon, zeigt Remote Avatar Video/Audio.
 - `package.json` - Node-Projekt mit LiveKit-/Agent-/Plugin-Dependencies und Start-/Check-Skripten.
@@ -44,6 +46,7 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
   - entfernt alte OpenAI Realtime WebRTC-/lokale TTS-Endpunkte.
   - ergänzt `/livekit-token` für LiveKit Join Token.
   - ergänzt expliziten Agent Dispatch per `AgentDispatchClient.createDispatch(roomName, AGENT_NAME, { metadata })`.
+  - ergänzt App-Shell-Fallback fuer beliebige Testpfade, damit Cache-bustende Links mit Slash funktionieren.
 - `public/index.html` wurde ersetzt:
   - ruft nur noch `/livekit-token` auf.
   - verbindet direkt mit LiveKit.
@@ -69,19 +72,19 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
 ## Bekannte Fehler / Blocker
 
 - Root Cause: alte Architektur erzeugte zwar einen Video-Track, aber kein sauber renderbares Avatar-Bild.
-- Früher blockierten GitHub-Sicherheitschecks teilweise `update_file`/`delete_file`; aktuelle Updates und Löschung waren erfolgreich.
+- Früher blockierten GitHub-Sicherheitschecks teilweise `update_file`/`delete_file`; aktuelle Updates und Löschung waren erfolgreich. Ein Regex-Fallback-Patch wurde blockiert, ein einfacher `app.get('*')`-Fallback wurde erfolgreich committed.
 - Noch kein finaler Deploy-Test erfolgt.
 - Ich habe in dieser Umgebung kein Fly.io-Deploy-Tool und keine Fly.io-Runtime-Secrets; Deploy/Test muss daher außerhalb dieses Toolsets oder über eine vorhandene CI/CD-Anbindung ausgeführt werden.
 - Potenzielle Prüfpunkte beim Test: korrekte LiveKit `AgentDispatchClient`-Signatur in installierter `livekit-server-sdk`-Version, vollständige Fly.io Secrets, LemonSlice Agent ID/Image URL, ElevenLabs Voice ID.
 
 ## Letzte bekannte Commits
 
+- `3486239ecb17343a3bfbe5ee266ea7bd123445a3` - `Serve app shell for cache-busting test paths`
+- `cf7733562a5a2a8086f58ce2cf05a934fb8d6c5d` - `Update project log after validation pass`
 - `4a63191a4c8638b5d0e2cdf5538fe38e4071de08` - `Update project log after removing test file`
 - `bb46bfcd87056b175f6f7a11499940d904c6f673` - `Remove accidental test file`
 - `7a15750290f5a8f56768d575a13d297b7adbe729` - `Update project log after package scripts`
-- `15436ee05026f4c50d1a183f1043dcff382ce4de` - `Update package scripts for LiveKit agent app`
-- `da0a0da96dfe7f58874c1fb7423554edeb3d17c1` - `Add process supervisor start script`
 
 ## Nächster konkreter Schritt
 
-Deploy auf Fly.io ausführen, danach Browser öffnen und im Verlauf prüfen, ob `/livekit-token` erfolgreich ist, der Agent dispatched wurde, Mikrofon publiziert wird und Remote Avatar-Video/Audio ankommt.
+Deploy auf Fly.io ausführen, danach Browser mit Cache-bustendem Testlink öffnen und im Verlauf prüfen, ob `/livekit-token` erfolgreich ist, der Agent dispatched wurde, Mikrofon publiziert wird und Remote Avatar-Video/Audio ankommt.
