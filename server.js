@@ -14,7 +14,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const LK_URL = process.env.LIVEKIT_URL || process.env.LK_URL;
 const LK_KEY = process.env.LIVEKIT_API_KEY || process.env.LK_KEY;
 const LK_SECRET = process.env.LIVEKIT_API_SECRET || process.env.LK_SECRET;
-const AGENT_NAME = process.env.AGENT_NAME || 'engelmann-avatar';
+const AGENT_NAME = process.env.AGENT_NAME || process.env.LIVEKIT_AGENT_NAME || 'engelmann-avatar';
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -41,6 +41,12 @@ app.get('/livekit-config', (_req, res) => {
     has_livekit_url: Boolean(LK_URL),
     has_livekit_key: Boolean(LK_KEY),
     has_livekit_secret: Boolean(LK_SECRET),
+    has_openai_key: Boolean(process.env.OPENAI_API_KEY),
+    has_elevenlabs_key: Boolean(process.env.ELEVENLABS_API_KEY || process.env.EL_KEY),
+    has_elevenlabs_voice_id: Boolean(process.env.ELEVENLABS_VOICE_ID || process.env.EL_VOICE_ID),
+    has_lemonslice_key: Boolean(process.env.LEMONSLICE_API_KEY || process.env.LS_KEY),
+    has_lemonslice_agent_id: Boolean(process.env.LEMONSLICE_AGENT_ID || process.env.LS_AGENT_ID),
+    has_lemonslice_image_url: Boolean(process.env.LEMONSLICE_AGENT_IMAGE_URL || process.env.LS_AGENT_IMAGE_URL),
     agent_name: AGENT_NAME
   });
 });
