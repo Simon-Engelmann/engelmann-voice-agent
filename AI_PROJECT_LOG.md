@@ -102,3 +102,7 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
 ## Nächster konkreter Schritt
 
 Codex/GitHub Issue #4 bearbeiten lassen. Danach deployen und mit frischem Cache-busting-Link testen, ob Remote Avatar-Video und KI-Stimme wirklich ankommen.
+
+- 2026-05-28: Issue #4 Hardening
+  - `agent.mjs`: Konfig-Validierung beim Startup ergänzt (LiveKit/OpenAI/ElevenLabs/LemonSlice Pflichtwerte), Alias `LIVEKIT_AGENT_NAME` gesetzt und maskierungsfreie Bool-Startup-Logs ergänzt.
+  - `server.js`: `/livekit-config` zeigt jetzt zusätzlich Presence-Flags für OpenAI, ElevenLabs und LemonSlice (ohne Secrets).
