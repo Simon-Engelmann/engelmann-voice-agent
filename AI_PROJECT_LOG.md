@@ -56,27 +56,32 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
   - `start:web`, `start:agent` und `check` ergänzt.
   - nicht mehr genutztes `multer` entfernt.
 - `try-again.txt` wurde gelöscht.
+- Prüfung durchgeführt:
+  - GitHub-Suche findet alte direkte Browser-Endpunkte nicht mehr.
+  - Offline-Parsecheck ohne installierte Dependencies war erfolgreich für `server.js`, `start.mjs`, `agent.mjs` und Browser-Modulskript.
 
 ## Offene Aufgaben
 
-1. Syntax-/Integrationsprüfung, soweit ohne Secrets möglich.
-2. Deployen und testen.
+1. Deploy auf Fly.io durchführen.
+2. LiveKit/LemonSlice-End-to-End testen.
+3. Falls Runtime fehlschlägt: zuerst `AgentDispatchClient`-Signatur, Secrets und Agent-Worker-Registrierung prüfen.
 
 ## Bekannte Fehler / Blocker
 
 - Root Cause: alte Architektur erzeugte zwar einen Video-Track, aber kein sauber renderbares Avatar-Bild.
 - Früher blockierten GitHub-Sicherheitschecks teilweise `update_file`/`delete_file`; aktuelle Updates und Löschung waren erfolgreich.
 - Noch kein finaler Deploy-Test erfolgt.
+- Ich habe in dieser Umgebung kein Fly.io-Deploy-Tool und keine Fly.io-Runtime-Secrets; Deploy/Test muss daher außerhalb dieses Toolsets oder über eine vorhandene CI/CD-Anbindung ausgeführt werden.
 - Potenzielle Prüfpunkte beim Test: korrekte LiveKit `AgentDispatchClient`-Signatur in installierter `livekit-server-sdk`-Version, vollständige Fly.io Secrets, LemonSlice Agent ID/Image URL, ElevenLabs Voice ID.
 
 ## Letzte bekannte Commits
 
+- `4a63191a4c8638b5d0e2cdf5538fe38e4071de08` - `Update project log after removing test file`
 - `bb46bfcd87056b175f6f7a11499940d904c6f673` - `Remove accidental test file`
 - `7a15750290f5a8f56768d575a13d297b7adbe729` - `Update project log after package scripts`
 - `15436ee05026f4c50d1a183f1043dcff382ce4de` - `Update package scripts for LiveKit agent app`
 - `da0a0da96dfe7f58874c1fb7423554edeb3d17c1` - `Add process supervisor start script`
-- `b837a1054f8d2c65d063d4355632d55d921e5f65` - `Replace browser app with LiveKit room client`
 
 ## Nächster konkreter Schritt
 
-Syntax-/Integrationsprüfung durchführen. Danach deployen und LiveKit/LemonSlice-End-to-End testen.
+Deploy auf Fly.io ausführen, danach Browser öffnen und im Verlauf prüfen, ob `/livekit-token` erfolgreich ist, der Agent dispatched wurde, Mikrofon publiziert wird und Remote Avatar-Video/Audio ankommt.
