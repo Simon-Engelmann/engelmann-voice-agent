@@ -48,6 +48,29 @@ function safeError(error) {
   };
 }
 
+function addSessionDiagnostics(session) {
+  const events = voice.AgentSessionEventTypes || {};
+  const names = [
+    events.AgentStateChanged,
+    events.UserStateChanged,
+    events.UserInputTranscribed,
+    events.ConversationItemAdded,
+    events.SpeechCreated,
+    events.Error,
+    events.Close,
+  ].filter(Boolean);
+
+  for (const eventName of names) {
+    session.on(eventName, (event) => {
+      try {
+        console.log('[agent] session event', JSON.stringify({ event: eventName, data: event }));
+      } catch {
+        console.log('[agent] session event', String(eventName));
+      }
+    });
+  }
+}
+
 validateConfig();
 console.log('[agent] startup config ok', JSON.stringify({
   agent_name: AGENT_NAME,
@@ -71,7 +94,7 @@ export default defineAgent({
     console.log('[agent] job received', JSON.stringify({ agent_name: AGENT_NAME, room: ctx.room?.name || null }));
 
     await ctx.connect();
-    console.log('[agent] room connected', JSON.stringify({ room: ctx.room?.name || null }));
+    console.log('[agent] room connected', JSON.stringify({ room: ctx.room?.name || null, local_identity: ctx.room?.localParticipant?.identity || null }));
 
     const session = new voice.AgentSession({
       llm: new openai.LLM({ model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini', temperature: 0.55 }),
@@ -79,18 +102,15 @@ export default defineAgent({
       tts: new elevenlabs.TTS({ voiceId: VOICE_ID, model: MODEL_ID, language: 'de' }),
     });
 
+    addSessionDiagnostics(session);
     console.log('[agent] stt llm tts initialized');
 
-    await session.start({ agent: new Assistant(), room: ctx.room });
-    console.log('[agent] voice session started');
-
+    let avatarStarted = false;
     const avatarOptions = {
-      agentPrompt: 'A calm German assistant, natural eye contact, subtle head movement, neutral professional expression.',
+      agentPrompt: 'Calm German assistant with natural eye contact, subtle head movement, and neutral professional expression.',
+      idleTimeout: -1,
       extraPayload: {
-        aspect_ratio: '1x1',
-        idle_timeout: -1,
-        response_done_timeout: 0.8,
-        simulcast: false,
+        aspect_ratio: '9x16',
       },
     };
 
@@ -98,13 +118,21 @@ export default defineAgent({
     else avatarOptions.agentImageUrl = IMAGE_URL;
 
     try {
-      console.log('[agent] starting lemonslice avatar', JSON.stringify({ has_agent_id: Boolean(AGENT_ID), has_image_url: Boolean(IMAGE_URL) }));
+      console.log('[agent] starting lemonslice avatar before voice session', JSON.stringify({ has_agent_id: Boolean(AGENT_ID), has_image_url: Boolean(IMAGE_URL), aspect_ratio: '9x16' }));
       const avatar = new AvatarSession(avatarOptions);
-      await avatar.start(session, ctx.room);
-      console.log('[agent] lemonslice avatar started');
+      const lemonSliceSessionId = await avatar.start(session, ctx.room, {
+        livekitUrl: process.env.LIVEKIT_URL,
+        livekitApiKey: process.env.LIVEKIT_API_KEY,
+        livekitApiSecret: process.env.LIVEKIT_API_SECRET,
+      });
+      avatarStarted = true;
+      console.log('[agent] lemonslice avatar started', JSON.stringify({ session_id: lemonSliceSessionId || null }));
     } catch (error) {
-      console.error('[agent] lemonslice avatar failed', JSON.stringify(safeError(error)));
+      console.error('[agent] lemonslice avatar failed; falling back to direct room audio', JSON.stringify(safeError(error)));
     }
+
+    await session.start({ agent: new Assistant(), room: ctx.room });
+    console.log('[agent] voice session started', JSON.stringify({ avatar_started: avatarStarted }));
 
     await session.generateReply({ instructions: 'Begruesse Simon kurz in einem Satz.' });
     console.log('[agent] initial reply requested');
