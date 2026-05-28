@@ -10,11 +10,69 @@ const { AccessToken, AgentDispatchClient } = require('livekit-server-sdk');
 const app = express();
 const PORT = process.env.PORT || 8080;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const DEBUG_LOG_LIMIT = 500;
+const DEBUG_LOGS = [];
+const rawConsole = {
+  log: console.log.bind(console),
+  warn: console.warn.bind(console),
+  error: console.error.bind(console),
+};
 
 const LK_URL = process.env.LIVEKIT_URL || process.env.LK_URL;
 const LK_KEY = process.env.LIVEKIT_API_KEY || process.env.LK_KEY;
 const LK_SECRET = process.env.LIVEKIT_API_SECRET || process.env.LK_SECRET;
 const AGENT_NAME = process.env.AGENT_NAME || process.env.LIVEKIT_AGENT_NAME || 'engelmann-avatar';
+
+function redact(value, key = '') {
+  if (/token|secret|key|authorization|password|jwt/i.test(key)) return '[redacted]';
+  if (value == null) return value;
+  if (typeof value === 'string') {
+    return value
+      .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt-redacted]')
+      .replace(/sk-[A-Za-z0-9_-]{12,}/g, '[api-key-redacted]')
+      .slice(0, 4000);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.slice(0, 50).map((item) => redact(item));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [childKey, childValue] of Object.entries(value).slice(0, 80)) {
+      out[childKey] = redact(childValue, childKey);
+    }
+    return out;
+  }
+  return String(value).slice(0, 4000);
+}
+
+function normalizeMessage(message) {
+  if (typeof message === 'string') return redact(message);
+  try { return JSON.stringify(redact(message)); }
+  catch { return String(message).slice(0, 4000); }
+}
+
+function addDebugLog({ source = 'server', level = 'info', message = '', data = null }) {
+  DEBUG_LOGS.push({
+    ts: new Date().toISOString(),
+    source: String(source || 'unknown').slice(0, 40),
+    level: String(level || 'info').slice(0, 20),
+    message: normalizeMessage(message),
+    data: redact(data),
+  });
+  while (DEBUG_LOGS.length > DEBUG_LOG_LIMIT) DEBUG_LOGS.shift();
+}
+
+console.log = (...args) => {
+  addDebugLog({ source: 'server', level: 'info', message: args.map(normalizeMessage).join(' ') });
+  rawConsole.log(...args);
+};
+console.warn = (...args) => {
+  addDebugLog({ source: 'server', level: 'warn', message: args.map(normalizeMessage).join(' ') });
+  rawConsole.warn(...args);
+};
+console.error = (...args) => {
+  addDebugLog({ source: 'server', level: 'error', message: args.map(normalizeMessage).join(' ') });
+  rawConsole.error(...args);
+};
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -34,6 +92,22 @@ app.use(express.static(PUBLIC_DIR, {
 }));
 
 app.get('/healthz', (_req, res) => res.status(200).json({ ok: true }));
+
+app.post('/debug-log', (req, res) => {
+  addDebugLog({
+    source: req.body?.source || 'browser',
+    level: req.body?.level || 'info',
+    message: req.body?.message || '',
+    data: req.body?.data || null,
+  });
+  res.status(204).end();
+});
+
+app.get('/debug-logs', (req, res) => {
+  const limit = Math.max(1, Math.min(Number(req.query.limit || 200), DEBUG_LOG_LIMIT));
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ ok: true, count: DEBUG_LOGS.length, logs: DEBUG_LOGS.slice(-limit) });
+});
 
 app.get('/livekit-config', (_req, res) => {
   res.json({
@@ -98,12 +172,20 @@ async function dispatchAgent({ roomName, identity }) {
     created_at: new Date().toISOString()
   });
 
-  return client.createDispatch(roomName, AGENT_NAME, { metadata });
+  console.log('[server] dispatch create', { roomName, agentName: AGENT_NAME, identity });
+  const dispatch = await client.createDispatch(roomName, AGENT_NAME, { metadata });
+  console.log('[server] dispatch created', {
+    roomName,
+    agentName: AGENT_NAME,
+    dispatchId: dispatch?.id || dispatch?.dispatchId || null,
+  });
+  return dispatch;
 }
 
 async function createLiveKitSession(req, res) {
   const missing = missingLiveKitConfig();
   if (missing.length) {
+    console.error('[server] missing livekit config', { missing });
     return res.status(500).json({ ok: false, error: 'Missing config: ' + missing.join(', ') });
   }
 
@@ -129,6 +211,7 @@ async function createLiveKitSession(req, res) {
       }
     });
   } catch (error) {
+    console.error('[server] livekit token or dispatch failed', { message: error?.message || String(error) });
     return res.status(502).json({
       ok: false,
       error: 'Failed to create LiveKit token or dispatch agent.',
