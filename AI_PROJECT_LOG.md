@@ -62,18 +62,32 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
 - Prüfung durchgeführt:
   - GitHub-Suche findet alte direkte Browser-Endpunkte nicht mehr.
   - Offline-Parsecheck ohne installierte Dependencies war erfolgreich für `server.js`, `start.mjs`, `agent.mjs` und Browser-Modulskript.
+- Live-Test durch Simon:
+  - `/livekit-token` erfolgreich.
+  - Dispatch-ID vorhanden.
+  - Browser connected.
+  - Mikrofon publiziert.
+  - Danach kein Remote Avatar-Video und keine KI-Stimme.
+- Codex-/GitHub-Handoff erstellt:
+  - Issue #4: `https://github.com/Simon-Engelmann/engelmann-voice-agent/issues/4`
+  - Labels: `codex`, `bug`, `livekit`, `avatar`.
+  - Enthält Fehlerbild, wahrscheinliche Fehlerzone, Muss-Anforderungen, Debug-Anforderungen und Akzeptanztests.
 
 ## Offene Aufgaben
 
-1. Deploy auf Fly.io durchführen.
-2. LiveKit/LemonSlice-End-to-End testen.
-3. Falls Runtime fehlschlägt: zuerst `AgentDispatchClient`-Signatur, Secrets und Agent-Worker-Registrierung prüfen.
+1. Codex/GitHub Issue #4 bearbeiten lassen.
+2. Agent Worker Runtime auf Fly.io prüfen.
+3. LiveKit/LemonSlice-End-to-End reparieren.
+4. Deploy auf Fly.io durchführen.
+5. Frischen Cache-busting-Testlink öffnen und prüfen.
 
 ## Bekannte Fehler / Blocker
 
-- Root Cause: alte Architektur erzeugte zwar einen Video-Track, aber kein sauber renderbares Avatar-Bild.
+- Aktueller Live-Fehler: Token/Dispatch/Room/Mikrofon funktionieren, aber kein Remote Agent/Avatar-Track und keine KI-Stimme erscheinen im Browser.
+- Wahrscheinlich crasht/startet der LiveKit Agent Worker nicht korrekt, akzeptiert den Dispatch nicht oder scheitert beim Initialisieren von STT/LLM/TTS/LemonSlice.
+- Root Cause der vorherigen Architektur: Browser->LemonSlice REST erzeugte zwar einen Video-Track, aber kein sauber renderbares Avatar-Bild.
 - Früher blockierten GitHub-Sicherheitschecks teilweise `update_file`/`delete_file`; aktuelle Updates und Löschung waren erfolgreich. Ein Regex-Fallback-Patch wurde blockiert, ein einfacher `app.get('*')`-Fallback wurde erfolgreich committed.
-- Noch kein finaler Deploy-Test erfolgt.
+- Eine zusaetzliche `CODEX_HANDOFF.md` wurde vom GitHub-Sicherheitscheck blockiert; die vollstaendige Handoff-Beschreibung steht daher in Issue #4.
 - Ich habe in dieser Umgebung kein Fly.io-Deploy-Tool und keine Fly.io-Runtime-Secrets; Deploy/Test muss daher außerhalb dieses Toolsets oder über eine vorhandene CI/CD-Anbindung ausgeführt werden.
 - Potenzielle Prüfpunkte beim Test: korrekte LiveKit `AgentDispatchClient`-Signatur in installierter `livekit-server-sdk`-Version, vollständige Fly.io Secrets, LemonSlice Agent ID/Image URL, ElevenLabs Voice ID.
 
@@ -87,4 +101,4 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
 
 ## Nächster konkreter Schritt
 
-Deploy auf Fly.io ausführen, danach Browser mit Cache-bustendem Testlink öffnen und im Verlauf prüfen, ob `/livekit-token` erfolgreich ist, der Agent dispatched wurde, Mikrofon publiziert wird und Remote Avatar-Video/Audio ankommt.
+Codex/GitHub Issue #4 bearbeiten lassen. Danach deployen und mit frischem Cache-busting-Link testen, ob Remote Avatar-Video und KI-Stimme wirklich ankommen.
