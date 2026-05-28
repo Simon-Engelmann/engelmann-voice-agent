@@ -18,10 +18,12 @@ const AGENT_NAME = process.env.AGENT_NAME || 'engelmann-avatar';
 
 app.use(express.json({ limit: '1mb' }));
 
-app.get('/', (_req, res) => {
+function sendIndex(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
-});
+}
+
+app.get('/', (_req, res) => sendIndex(res));
 
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
@@ -131,6 +133,11 @@ async function createLiveKitSession(req, res) {
 
 app.post('/livekit-token', createLiveKitSession);
 app.get('/livekit-token', createLiveKitSession);
+
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ ok: false, error: 'Not found' });
+  return sendIndex(res);
+});
 
 app.listen(PORT, () => {
   console.log('Server listening on http://localhost:' + PORT);
