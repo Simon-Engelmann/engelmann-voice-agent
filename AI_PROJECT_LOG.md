@@ -35,6 +35,16 @@ Browser -> LemonSlice REST -> LiveKit Track
 Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
 ```
 
+## Recherche / technische Erkenntnis
+
+Das installierbare Paket `@livekit/agents-plugin-lemonslice` dokumentiert:
+
+- `AvatarSession` soll nach Erstellung der `AgentSession`, aber vor `AgentSession.start(...)` gestartet werden.
+- In Version `1.4.x` erweitert LemonSlice `voice.AvatarSession`; die Basisklasse warnt explizit, wenn `AvatarSession.start()` nach `AgentSession.start()` aufgerufen wird, weil vorhandenes Audio-Output ersetzt werden kann.
+- `extraPayload` ist in `1.4.x` offiziell vorhanden; alte Freifelder wie `response_done_timeout` und `simulcast` sind fuer diesen Plugin-Pfad riskant und wurden entfernt.
+
+Bewertung: Der vorherige Patch, der die Voice-Session vor LemonSlice AvatarSession startete, war als Fallback gedacht, ist aber fuer den offiziellen Avatar-Pfad wahrscheinlich falsch. Der neue Fix nutzt wieder die offizielle Avatar-vor-Session-Reihenfolge und startet Voice erst danach.
+
 ## Vorhandene relevante Dateien
 
 - `agent.mjs` - LiveKit Agents Worker mit OpenAI STT/LLM, ElevenLabs TTS und LemonSlice `AvatarSession`.
@@ -46,7 +56,6 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
 
 ## Geänderte Dateien bisher
 
-- `AI_PROJECT_LOG.md` wurde neu angelegt und wird nach wichtigen Schritten aktualisiert.
 - `server.js` wurde ersetzt/erweitert:
   - entfernt alte Browser→LemonSlice-REST-Endpunkte.
   - entfernt alte OpenAI Realtime WebRTC-/lokale TTS-Endpunkte.
@@ -67,15 +76,16 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
   - startet `server.js` und `agent.mjs`.
   - leitet stdout/stderr der Child-Prozesse an `/debug-log` weiter.
   - loggt Prozessstarts, Exits und Startfehler.
-- `package.json` wurde aktualisiert.
-- `try-again.txt` wurde gelöscht.
-- `agent.mjs` wurde gehärtet:
-  - Konfig-Validierung beim Startup ergänzt.
-  - `LIVEKIT_AGENT_NAME` Alias gesetzt.
-  - Startup-Logs mit Bool-Flags ohne Secret-Leaks ergänzt.
-  - Voice-Session startet jetzt vor LemonSlice AvatarSession.
-  - LemonSlice Avatar-Start ist in `try/catch`; ein Avatar-Fehler blockiert nicht mehr die ElevenLabs-Stimme.
-  - Agent loggt Job, Room Connect, STT/LLM/TTS Init, Voice Session Start, Avatar Start/Fails und initiale Antwort.
+- `agent.mjs` wurde erneut korrigiert:
+  - behält Konfig-Validierung und Debug-Logs.
+  - ruft `ctx.connect()` auf, damit der Agent als lokaler Teilnehmer im Raum ist.
+  - erstellt `AgentSession`.
+  - startet `AvatarSession` vor `session.start(...)`, wie vom Plugin erwartet.
+  - entfernt riskante Felder `response_done_timeout` und `simulcast`.
+  - setzt nur noch `idleTimeout: -1` und `extraPayload.aspect_ratio: "9x16"`.
+  - übergibt LiveKit Credentials explizit an `avatar.start(...)`.
+  - startet bei Avatar-Fehler weiterhin Voice als Fallback, damit wenigstens Audio funktionieren kann.
+  - ergänzt Session-Event-Diagnose.
 
 ## Aktueller Live-Test durch Simon
 
@@ -97,40 +107,35 @@ Browser -> OpenAI Realtime WebRTC -> lokales TTS -> LemonSlice Audio Feed
 }
 ```
 
-Bewertung: Es fehlt kein kompletter Secret-Eintrag. Da Browser-Join, Dispatch und Mikrofon-Publish funktionieren, liegt der Fehler nun wahrscheinlich im Agent-Worker-Laufzeitpfad oder bei LemonSlice AvatarSession/API-Verhalten.
+Bewertung: Es fehlt kein kompletter Secret-Eintrag. Der Fehler lag danach wahrscheinlich im Agent-/Avatar-Startpfad, nicht in fehlenden Tokens.
 
 ## Offene Aufgaben
 
 1. Aktuellen Main deployen.
 2. Mit frischem Cache-busting-Testlink testen.
 3. Danach `/debug-logs?limit=200` abrufen und anhand der Logs pruefen:
-   - Browser Start/LiveKit Events vorhanden?
    - Server Dispatch erstellt?
    - Supervisor Agent-Prozess gestartet?
    - Agent `[agent] job received` vorhanden?
+   - Agent `[agent] lemonslice avatar started` oder `[agent] lemonslice avatar failed` vorhanden?
    - Agent `[agent] voice session started` vorhanden?
-   - Agent `[agent] lemonslice avatar failed` vorhanden?
-4. Wenn Debug-Logs leer bleiben: pruefen, ob neuer Deploy wirklich aktiv ist.
+   - Browser `Track subscribed` fuer Audio/Video vorhanden?
+4. Wenn Avatar weiter fehlt, Debug-Logs statt Screenshots auswerten.
 
 ## Bekannte Fehler / Blocker
 
-- Aktueller Live-Fehler vor letztem Patch: Token/Dispatch/Room/Mikrofon funktionieren, aber kein Remote Agent/Avatar-Track und keine KI-Stimme erscheinen im Browser.
-- `livekit-config` zeigt, dass die relevanten Secrets vorhanden sind.
-- Der naechste Test muss unterscheiden:
-  - Agent startet gar nicht.
-  - Agent startet, aber Voice Session scheitert.
-  - Voice funktioniert, aber LemonSlice AvatarSession scheitert.
-- Debug-Log-Endpunkt ist absichtlich fuer Fehlersuche erreichbar und redacted Tokens/Secrets; trotzdem nicht als dauerhaftes Produktions-Monitoring betrachten.
-- Ich habe in dieser Umgebung kein Fly.io-Deploy-Tool und keine Fly.io-Runtime-Secrets; Deploy/Test muss außerhalb dieses Toolsets oder über vorhandene CI/CD erfolgen.
+- Ich kann aus dieser Umgebung den Fly.io-Host nicht direkt per HTTP erreichen; Deploy/Test muss daher durch Simon erfolgen, danach kann der Inhalt von `/debug-logs?limit=200` als Text geteilt oder anderweitig zugänglich gemacht werden.
+- `package.json`-Pinning auf exakt `1.4.4` wurde versucht, aber durch GitHub-Sicherheitscheck blockiert. Aktuell bleiben die vorhandenen `^1.0.46` Ranges bestehen; ohne Lockfile zieht Fly wahrscheinlich aktuelle `1.4.x`, was zur geprüften Plugin-API passt.
+- Debug-Log-Endpunkt ist absichtlich fuer Fehlersuche erreichbar und redacted Tokens/Secrets; nicht als dauerhaftes Produktions-Monitoring betrachten.
 
 ## Letzte bekannte Commits
 
+- `ea1ed0212f2658d0c125cf0c98f669ac29e0c199` - `Fix LemonSlice avatar startup order and payload`
 - `473742c2ef722722313b690660a2aa470a4230d1` - `Send browser diagnostics to debug log endpoint`
 - `432eae56c6b2f79b302b7a976ed42844701e50cc` - `Forward child process logs to debug endpoint`
 - `261c6418572dddc6fc1232fd02d3dc8e26ba0ba3` - `Add remote debug log endpoints`
 - `4a40bb01a828aea7e22cd93548dc18ed8ebf39e2` - `Make agent voice resilient to avatar startup failures`
-- `3486239ecb17343a3bfbe5ee266ea7bd123445a3` - `Serve app shell for cache-busting test paths`
 
 ## Nächster konkreter Schritt
 
-Aktuellen Main deployen. Danach frischen Testlink öffnen, kurz warten, dann `/debug-logs?limit=200` abrufen. Aus diesen Logs sollte erkennbar sein, ob der Agent-Prozess startet, ob ein Job ankommt, ob Voice Session startet und ob LemonSlice AvatarSession scheitert.
+Aktuellen Main deployen. Danach frischen Testlink öffnen, 20 Sekunden warten, dann `/debug-logs?limit=200` abrufen. Erwartet wird entweder Avatar-Video/Audio im Browser oder ein konkreter LemonSlice-/Agent-Fehler in den Debug-Logs.
