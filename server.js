@@ -18,7 +18,25 @@ const rawConsole = {
   error: console.error.bind(console),
 };
 
-const LK_URL = process.env.LIVEKIT_URL || process.env.LK_URL;
+function regionalLiveKitUrl(url, region = 'eu') {
+  if (!url || !region) return url;
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('.rtc.livekit.cloud')) return url.replace(/\/$/, '');
+    if (!u.hostname.endsWith('.livekit.cloud')) return url.replace(/\/$/, '');
+    const project = u.hostname.replace('.livekit.cloud', '');
+    u.hostname = project + '.' + region + '.rtc.livekit.cloud';
+    if (u.protocol === 'http:') u.protocol = 'ws:';
+    if (u.protocol === 'https:') u.protocol = 'wss:';
+    return u.toString().replace(/\/$/, '');
+  } catch {
+    return url;
+  }
+}
+
+const LK_API_URL = process.env.LIVEKIT_URL || process.env.LK_URL;
+const LIVEKIT_REGION = process.env.LIVEKIT_REGION || process.env.LK_REGION || 'eu';
+const LK_RTC_URL = process.env.LIVEKIT_RTC_URL || process.env.LK_RTC_URL || regionalLiveKitUrl(LK_API_URL, LIVEKIT_REGION);
 const LK_KEY = process.env.LIVEKIT_API_KEY || process.env.LK_KEY;
 const LK_SECRET = process.env.LIVEKIT_API_SECRET || process.env.LK_SECRET;
 const AGENT_NAME = process.env.AGENT_NAME || process.env.LIVEKIT_AGENT_NAME || 'engelmann-avatar';
@@ -112,7 +130,11 @@ app.get('/debug-logs', (req, res) => {
 app.get('/livekit-config', (_req, res) => {
   res.json({
     ok: true,
-    has_livekit_url: Boolean(LK_URL),
+    livekit_region: LIVEKIT_REGION,
+    livekit_api_host: (() => { try { return new URL(LK_API_URL).hostname; } catch { return null; } })(),
+    livekit_rtc_host: (() => { try { return new URL(LK_RTC_URL).hostname; } catch { return null; } })(),
+    has_livekit_url: Boolean(LK_API_URL),
+    has_livekit_rtc_url: Boolean(LK_RTC_URL),
     has_livekit_key: Boolean(LK_KEY),
     has_livekit_secret: Boolean(LK_SECRET),
     has_openai_key: Boolean(process.env.OPENAI_API_KEY),
@@ -127,7 +149,8 @@ app.get('/livekit-config', (_req, res) => {
 
 function missingLiveKitConfig() {
   const missing = [];
-  if (!LK_URL) missing.push('LIVEKIT_URL or LK_URL');
+  if (!LK_API_URL) missing.push('LIVEKIT_URL or LK_URL');
+  if (!LK_RTC_URL) missing.push('LIVEKIT_RTC_URL or derived regional RTC URL');
   if (!LK_KEY) missing.push('LIVEKIT_API_KEY or LK_KEY');
   if (!LK_SECRET) missing.push('LIVEKIT_API_SECRET or LK_SECRET');
   return missing;
@@ -164,15 +187,16 @@ async function createJoinToken({ roomName, identity, name }) {
 }
 
 async function dispatchAgent({ roomName, identity }) {
-  const client = new AgentDispatchClient(LK_URL, LK_KEY, LK_SECRET);
+  const client = new AgentDispatchClient(LK_API_URL, LK_KEY, LK_SECRET);
   const metadata = JSON.stringify({
     user_id: identity,
     user_name: 'Simon',
     source: 'web',
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    livekit_rtc_url: LK_RTC_URL
   });
 
-  console.log('[server] dispatch create', { roomName, agentName: AGENT_NAME, identity });
+  console.log('[server] dispatch create', { roomName, agentName: AGENT_NAME, identity, livekitRtcHost: (() => { try { return new URL(LK_RTC_URL).hostname; } catch { return null; } })() });
   const dispatch = await client.createDispatch(roomName, AGENT_NAME, { metadata });
   console.log('[server] dispatch created', {
     roomName,
@@ -199,7 +223,9 @@ async function createLiveKitSession(req, res) {
 
     return res.json({
       ok: true,
-      livekit_url: LK_URL,
+      livekit_url: LK_RTC_URL,
+      livekit_api_host: (() => { try { return new URL(LK_API_URL).hostname; } catch { return null; } })(),
+      livekit_rtc_host: (() => { try { return new URL(LK_RTC_URL).hostname; } catch { return null; } })(),
       token,
       room: roomName,
       identity,
@@ -231,4 +257,6 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log('Server listening on http://localhost:' + PORT);
   console.log('LiveKit agent dispatch target: ' + AGENT_NAME);
+  console.log('LiveKit API URL: ' + LK_API_URL);
+  console.log('LiveKit RTC URL: ' + LK_RTC_URL);
 });
