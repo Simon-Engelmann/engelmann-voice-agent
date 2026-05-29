@@ -18,6 +18,7 @@
     "@livekit/agents-plugin-elevenlabs": "^1.0.46",
     "@livekit/agents-plugin-lemonslice": "^1.0.46",
     "@livekit/agents-plugin-openai": "^1.0.46",
+    "@livekit/agents-plugin-silero": "^1.0.46",
     "dotenv": "^16.5.0",
     "express": "^4.19.2",
     "livekit-server-sdk": "^2.15.0"
