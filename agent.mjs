@@ -175,8 +175,13 @@ export default defineAgent({
       console.error('[agent] lemonslice avatar failed; falling back to direct room audio', JSON.stringify(safeError(error)));
     }
 
-    await session.start({ agent: new Assistant(), room: ctx.room });
-    console.log('[agent] voice session started', JSON.stringify({ avatar_started: avatarStarted }));
+    // When the avatar is active it republishes lip-synced audio + video
+    // (lemonslice-audio). If RoomIO also publishes the agent's own TTS track
+    // (roomio_audio), the client plays both and the direct track runs ahead of
+    // the avatar video -> out-of-sync lips. So disable RoomIO audio output when
+    // the avatar started; keep it on as a fallback when the avatar failed.
+    await session.start({ agent: new Assistant(), room: ctx.room, outputOptions: { audioEnabled: !avatarStarted } });
+    console.log('[agent] voice session started', JSON.stringify({ avatar_started: avatarStarted, room_audio_enabled: !avatarStarted }));
     await session.generateReply({ instructions: 'Begruesse Simon kurz in einem Satz.' });
     console.log('[agent] initial reply requested');
   },
