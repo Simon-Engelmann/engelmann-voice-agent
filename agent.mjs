@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-import { cli, defineAgent, ServerOptions, voice } from '@livekit/agents';
+import { cli, defineAgent, ServerOptions, voice, llm } from '@livekit/agents';
 import * as openai from '@livekit/agents-plugin-openai';
 import * as elevenlabs from '@livekit/agents-plugin-elevenlabs';
 import * as silero from '@livekit/agents-plugin-silero';
@@ -178,27 +178,93 @@ function readJobMetadata(ctx) {
   try { return JSON.parse(raw) || {}; } catch { return {}; }
 }
 
-// Varied, location-aware greeting instructions (the LLM phrases the actual line).
+// Varied greeting: keep the dry-humour persona greeting and, when a location is
+// known, add a natural second line ("Ich sehe, du bist in der Nähe von …").
 function buildGreetingInstructions(location) {
   const place = location && location.place && (location.place.label || location.place.city);
-  const pool = place
-    ? [
-        `Begrüße Simon herzlich in genau EINEM kurzen Satz und erwähne dabei natürlich, dass du erkennst, dass er gerade in der Nähe von ${place} ist.`,
-        `Sag Simon in einem lockeren Satz hallo und baue beiläufig ein, dass du seinen Standort (${place}) kennst und den Kontext übernommen hast.`,
-        `Begrüße Simon knapp und mit trockenem Humor in EINEM Satz und beziehe dich darauf, dass er sich gerade rund um ${place} befindet.`,
-        `Eröffne das Gespräch mit einem Satz, der erwähnt, dass du Simon in der Gegend von ${place} verortest, und frag, was du erledigen sollst.`,
-      ]
-    : [
-        'Begrüße Simon kurz, locker und mit einer kleinen Variation in genau EINEM Satz.',
-        'Sag Simon in einem knappen, freundlichen Satz hallo und frag, was du tun sollst.',
-        'Begrüße Simon mit trockenem Humor in EINEM kurzen Satz.',
-        'Eröffne das Gespräch mit einem lockeren Einzeiler und biete deine Hilfe an.',
-      ];
-  return pool[Math.floor(Math.random() * pool.length)];
+  const base = [
+    'Begrüße Simon kurz in deinem typischen, trocken-humorigen Stil (ein Satz).',
+    'Sag Simon locker und knapp hallo, mit einer kleinen Variation (ein Satz).',
+    'Eröffne mit einem trockenen, freundlichen Einzeiler.',
+  ];
+  const opener = base[Math.floor(Math.random() * base.length)];
+  if (place) {
+    const adds = [
+      `Hänge danach locker einen zweiten kurzen Satz an wie: „Ich sehe, du bist gerade in der Nähe von ${place}.“`,
+      `Erwähne dann beiläufig in einem zweiten kurzen Satz, dass du siehst, dass er sich rund um ${place} befindet.`,
+      `Sag anschließend kurz, dass du seinen Standort (${place}) kennst und den Kontext übernommen hast.`,
+    ];
+    return `${opener} ${adds[Math.floor(Math.random() * adds.length)]} Danach frag, was du tun sollst.`;
+  }
+  return `${opener} Danach frag, was du tun sollst.`;
 }
 
-const INSTRUCTIONS = 'Du bist Simons deutscher Voice-Agent und als sichtbarer LemonSlice-Avatar in der App zu sehen. Antworte immer Deutsch, kurz, klar, nuechtern und trocken-humorig. Maximal drei Saetze.';
-class Assistant extends voice.Agent { constructor() { super({ instructions: INSTRUCTIONS }); } }
+const BASE_PERSONA = 'Du bist Simons deutscher Voice-Agent und als sichtbarer LemonSlice-Avatar in der App zu sehen. Antworte immer Deutsch, kurz, klar, nuechtern und trocken-humorig. Maximal drei Saetze.';
+
+// Per-session instructions: persona + tool guidance + memory + optional location.
+function buildInstructions(location) {
+  const place = location && location.place && (location.place.label || location.place.city);
+  const tools = [
+    '',
+    'Du kannst über die Geräte des Nutzers Werkzeuge nutzen – rufe sie NUR auf, wenn es inhaltlich nötig ist, und kündige es kurz an:',
+    '- look_through_camera: öffnet die Kamera, nimmt ein Foto auf und liefert dir eine Beschreibung. Nutze es, wenn der Nutzer möchte, dass du etwas Reales ansiehst ("schau dir das an", "was ist das", "erkennst du das").',
+    '- analyze_document: lässt den Nutzer ein Bild oder PDF auswählen und liefert dir eine Analyse.',
+    '- get_user_location: liefert den ungefähren Standort (Ort) des Nutzers.',
+    '- get_clipboard_text: übernimmt den vom Nutzer kopierten Text.',
+    'Wenn ein Werkzeug ein Ergebnis liefert, fasse es natürlich gesprochen zusammen und sprich darüber.',
+    'Du erinnerst dich an alles, was in diesem Gespräch gesagt und analysiert wurde, und beziehst dich darauf.',
+  ].join('\n');
+  const loc = place ? `\nDu weißt aus dem Standort, dass sich der Nutzer ungefähr in ${place} befindet; beziehe dich natürlich darauf, wenn es passt, und merke es dir.` : '';
+  return BASE_PERSONA + tools + loc;
+}
+
+// Builds the agent-side tools. Each one asks the browser (over the LiveKit data
+// channel) to run a device capability and returns the result text to the LLM,
+// which then speaks about it. `browserRequest` resolves with the browser reply.
+function buildBrowserTools(browserRequest) {
+  return {
+    look_through_camera: llm.tool({
+      description: 'Öffnet die Kamera des Nutzers, nimmt ein Foto auf und gibt eine Beschreibung des Bildinhalts zurück. Verwenden, wenn der Nutzer möchte, dass du etwas Reales ansiehst oder erkennst.',
+      execute: async () => {
+        const res = await browserRequest({ tool: 'takePhoto' }, 120000);
+        if (!res || res.timeout) return 'Der Nutzer hat kein Foto aufgenommen.';
+        if (res.declined) return 'Der Nutzer hat das Foto abgelehnt.';
+        if (res.error) return `Das Foto konnte nicht analysiert werden (${res.error}).`;
+        return res.result ? `Bildanalyse: ${res.result}` : 'Es kam kein Bild an.';
+      },
+    }),
+    analyze_document: llm.tool({
+      description: 'Lässt den Nutzer ein Bild oder PDF auswählen und gibt eine Analyse/Beschreibung zurück. Für Dokumente, Screenshots oder PDFs.',
+      execute: async () => {
+        const res = await browserRequest({ tool: 'pickFile' }, 120000);
+        if (!res || res.timeout) return 'Der Nutzer hat keine Datei ausgewählt.';
+        if (res.declined) return 'Der Nutzer hat abgelehnt.';
+        if (res.error) return `Die Datei konnte nicht analysiert werden (${res.error}).`;
+        if (res.result && res.result.text) return `Analyse: ${res.result.text}`;
+        if (res.result && res.result.note) return res.result.note;
+        return 'Es kam keine Datei an.';
+      },
+    }),
+    get_user_location: llm.tool({
+      description: 'Gibt den aktuellen ungefähren Standort (Ort/Stadt) des Nutzers zurück.',
+      execute: async () => {
+        const res = await browserRequest({ tool: 'getLocation' }, 20000);
+        if (!res || res.timeout || !res.result) return 'Standort ist nicht verfügbar.';
+        const p = res.result.place;
+        if (p && (p.label || p.city)) return `Standort: ${p.label || p.city}`;
+        return `Standort: ${Number(res.result.latitude).toFixed(3)}, ${Number(res.result.longitude).toFixed(3)}`;
+      },
+    }),
+    get_clipboard_text: llm.tool({
+      description: 'Übernimmt den vom Nutzer kopierten Text aus der Zwischenablage, wenn der Nutzer das möchte.',
+      execute: async () => {
+        const res = await browserRequest({ tool: 'pasteFromClipboard' }, 60000);
+        if (!res || res.timeout || !res.result) return 'Es wurde kein Text übernommen.';
+        return `Eingefügter Text: ${res.result}`;
+      },
+    }),
+  };
+}
 
 export default defineAgent({
   prewarm: async (proc) => {
@@ -211,6 +277,34 @@ export default defineAgent({
     console.log('[agent] connect url override result', JSON.stringify({ overridden, rtc_host: hostOf(LIVEKIT_RTC_URL) }));
     await ctx.connect();
     console.log('[agent] room connected', JSON.stringify({ room: ctx.room?.name || null, local_identity: ctx.room?.localParticipant?.identity || null }));
+
+    // Bridge to the browser over the LiveKit data channel: the agent's tools
+    // publish a request and await the matching {type:'tool_result'} reply.
+    const pending = new Map();
+    const onData = (payload) => {
+      try {
+        const msg = JSON.parse(new TextDecoder().decode(payload));
+        if (msg && msg.type === 'tool_result' && pending.has(msg.id)) {
+          const resolve = pending.get(msg.id);
+          pending.delete(msg.id);
+          resolve(msg);
+        }
+      } catch {}
+    };
+    try { ctx.room.on('dataReceived', onData); } catch (error) { console.error('[agent] data listener failed', JSON.stringify(safeError(error))); }
+
+    const browserRequest = (req, timeoutMs = 120000) => new Promise((resolve) => {
+      const id = `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      pending.set(id, resolve);
+      setTimeout(() => { if (pending.has(id)) { pending.delete(id); resolve({ timeout: true }); } }, timeoutMs);
+      try {
+        const data = new TextEncoder().encode(JSON.stringify(Object.assign({ type: 'tool_request', id }, req)));
+        Promise.resolve(ctx.room.localParticipant.publishData(data, { reliable: true, topic: 'app' }))
+          .catch((error) => { console.error('[agent] publishData failed', JSON.stringify(safeError(error))); });
+      } catch (error) {
+        console.error('[agent] tool request failed', JSON.stringify(safeError(error)));
+      }
+    });
 
     const vad = ctx.proc?.userData?.vad;
     const turnDetection = await createTurnDetector();
@@ -250,17 +344,23 @@ export default defineAgent({
       console.error('[agent] lemonslice avatar failed; falling back to direct room audio', JSON.stringify(safeError(error)));
     }
 
+    // Location (from dispatch metadata) powers a context-aware greeting and the
+    // agent's session memory; tools let the agent open device features itself.
+    const jobMeta = readJobMetadata(ctx);
+    const agent = new voice.Agent({
+      instructions: buildInstructions(jobMeta.location),
+      tools: buildBrowserTools(browserRequest),
+    });
+    console.log('[agent] agent built', JSON.stringify({ has_location: Boolean(jobMeta.location), place: jobMeta.location?.place?.label || null }));
+
     // When the avatar is active it republishes lip-synced audio + video
     // (lemonslice-audio). If RoomIO also publishes the agent's own TTS track
     // (roomio_audio), the client plays both and the direct track runs ahead of
     // the avatar video -> out-of-sync lips. So disable RoomIO audio output when
     // the avatar started; keep it on as a fallback when the avatar failed.
-    await session.start({ agent: new Assistant(), room: ctx.room, outputOptions: { audioEnabled: !avatarStarted } });
+    await session.start({ agent, room: ctx.room, outputOptions: { audioEnabled: !avatarStarted } });
     console.log('[agent] voice session started', JSON.stringify({ avatar_started: avatarStarted, room_audio_enabled: !avatarStarted }));
-    const jobMeta = readJobMetadata(ctx);
-    const greeting = buildGreetingInstructions(jobMeta.location);
-    console.log('[agent] greeting', JSON.stringify({ has_location: Boolean(jobMeta.location), place: jobMeta.location?.place?.label || null }));
-    await session.generateReply({ instructions: greeting });
+    await session.generateReply({ instructions: buildGreetingInstructions(jobMeta.location) });
     console.log('[agent] initial reply requested');
   },
 });

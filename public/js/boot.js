@@ -1,11 +1,15 @@
-// Orchestrates the native-app behaviours on top of the existing LiveKit voice
-// app (exposed as window.LKApp by index.html). Everything degrades gracefully.
-import { summary, isIOS, isStandalone, caps } from './capabilities.js';
+// Orchestrates native behaviours on top of the existing LiveKit voice app
+// (window.LKApp from index.html). The capabilities are AGENT-DRIVEN: the agent
+// decides it needs the camera / a file / the clipboard / the location and sends
+// a tool request over the data channel; we show a single-tap popup (the tap is
+// the gesture iOS requires), run it, and return the result so the agent can
+// speak about it. No standing buttons – just the start screen and the talk.
+import { summary, isIOS, caps } from './capabilities.js';
 import { micPermission, requestMicrophone, explainState } from './permissions.js';
 import { registerServiceWorker, initInstallPrompt } from './pwa.js';
 import { getLocationContext, toAgentPayload } from './location.js';
-import { sheet, confirmSheet, infoSheet, toast } from './ui.js';
-import { capturePhoto, captureVideo, pickDocuments, readClipboard, shareContent, analyzeMedia, humanSize } from './media.js';
+import { sheet, infoSheet, toast } from './ui.js';
+import { pickFiles, compressImage, pickDocuments, readClipboard, analyzeMedia } from './media.js';
 
 const log = (message, data) => {
   try {
@@ -33,9 +37,7 @@ async function primeLocation() {
     const ctx = await getLocationContext();
     log('location context', { available: ctx.available, reason: ctx.reason, place: ctx.place ? ctx.place.label : null });
     const payload = toAgentPayload(ctx);
-    if (payload) {
-      window.__startContext = Object.assign({}, window.__startContext, { location: payload });
-    }
+    if (payload) window.__startContext = Object.assign({}, window.__startContext, { location: payload });
     return ctx;
   } catch (e) {
     log('location error', { message: String(e && e.message) });
@@ -49,16 +51,13 @@ async function initVoice() {
   if (!app) { toast('Voice-Agent konnte nicht geladen werden', { icon: '⚠️' }); return; }
   if (app.isStarted && app.isStarted()) return;
 
-  const state = await micPermission(); // 'granted' | 'denied' | 'prompt' | 'unsupported'
+  const state = await micPermission();
   log('mic permission', { state });
 
   if (state === 'granted') {
-    // Permission persists -> start automatically. (Audio playback may still need
-    // a tap on iOS; the app surfaces a tap-to-listen fallback if so.)
-    try { await app.start(); } catch (e) { log('auto start failed', { message: String(e && e.message) }); showActivateScreen(app, state); }
+    try { await app.start(); } catch (e) { log('auto start failed', { message: String(e && e.message) }); showActivateScreen(app); }
     return;
   }
-
   if (state === 'denied') {
     await infoSheet({
       icon: '🎤',
@@ -71,12 +70,10 @@ async function initVoice() {
     });
     return;
   }
-
-  // 'prompt' or 'unsupported' (typical on iOS Safari) -> need a user gesture.
-  showActivateScreen(app, state);
+  showActivateScreen(app);
 }
 
-function showActivateScreen(app, state) {
+function showActivateScreen(app) {
   sheet({
     icon: '🎙️',
     title: 'Voice-Agent aktivieren',
@@ -85,112 +82,41 @@ function showActivateScreen(app, state) {
     actions: [{ label: 'Voice-Agent aktivieren', value: 'go', kind: 'primary' }, { label: 'Später', value: null, kind: 'ghost' }],
   }).then(async (v) => {
     if (v !== 'go') return;
-    // Acquire mic inside the user gesture (required by iOS), then start.
     try {
       const stream = await requestMicrophone();
-      stream.getTracks().forEach((t) => t.stop()); // LiveKit re-acquires with permission now granted
+      stream.getTracks().forEach((t) => t.stop());
       await app.start();
     } catch (e) {
       const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
-      await infoSheet({
-        icon: '🎤',
-        title: denied ? 'Mikrofon nicht erlaubt' : 'Start fehlgeschlagen',
-        body: denied ? explainState('microphone', 'denied') : String(e && e.message || e),
-        okLabel: 'OK',
-      });
+      await infoSheet({ icon: '🎤', title: denied ? 'Mikrofon nicht erlaubt' : 'Start fehlgeschlagen', body: denied ? explainState('microphone', 'denied') : String(e && e.message || e), okLabel: 'OK' });
     }
   });
 }
 
-// ---- Capabilities tray (user-initiated actions) -----------------------------
-function injectTrayCss() {
-  const css = `
-  .ek-fab{position:fixed;right:max(14px,env(safe-area-inset-right));bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:55;width:54px;height:54px;border-radius:50%;border:0;cursor:pointer;background:linear-gradient(180deg,#0A84FF,#5E5CE6);color:#fff;font-size:24px;box-shadow:0 12px 30px rgba(10,132,255,.4);display:grid;place-items:center}
-  .ek-fab:focus-visible{outline:3px solid rgba(10,132,255,.5);outline-offset:3px}
-  .ek-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:4px 12px 12px}
-  .ek-cap{appearance:none;border:1px solid var(--ek-line,rgba(0,0,0,.08));background:var(--ek-soft,#f2f2f7);color:inherit;border-radius:16px;min-height:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;font:inherit;font-size:12.5px;font-weight:600;padding:8px}
-  .ek-cap .e{font-size:24px}
-  .ek-cap:focus-visible{outline:3px solid rgba(10,132,255,.5);outline-offset:2px}
-  @media(prefers-color-scheme:dark){.ek-cap{--ek-soft:#2c2c2e;--ek-line:rgba(255,255,255,.12)}}`;
-  const el = document.createElement('style');
-  el.textContent = css;
-  document.head.appendChild(el);
-}
-
-function trayActions() {
-  const a = [
-    { id: 'photo', emoji: '📷', label: 'Foto' },
-    { id: 'video', emoji: '🎬', label: 'Video' },
-    { id: 'file', emoji: '📄', label: 'Datei/PDF' },
-    { id: 'paste', emoji: '📋', label: 'Einfügen' },
-    { id: 'share', emoji: '📤', label: 'Teilen' },
-    { id: 'mute', emoji: '🔇', label: 'Stumm' },
-  ];
-  if (!isStandalone()) a.push({ id: 'install', emoji: '📲', label: 'Installieren' });
-  return a;
-}
-
-function openTray(installer) {
-  const scrim = document.createElement('div');
-  scrim.className = 'ek-scrim show';
-  scrim.setAttribute('role', 'dialog');
-  scrim.setAttribute('aria-label', 'Funktionen');
-  const grid = trayActions().map((x) => `<button class="ek-cap" data-id="${x.id}"><span class="e" aria-hidden="true">${x.emoji}</span><span>${x.label}</span></button>`).join('');
-  scrim.innerHTML = `<div class="ek-sheet"><div class="ek-pad"><h2 class="ek-title">Was möchtest du tun?</h2></div><div class="ek-grid">${grid}</div><div class="ek-actions"><button class="ek-btn ghost" data-id="close">Schließen</button></div></div>`;
-  const close = () => { scrim.classList.remove('show'); setTimeout(() => scrim.remove(), 220); };
-  scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
-  scrim.querySelectorAll('button').forEach((b) => b.addEventListener('click', async () => {
-    const id = b.dataset.id;
-    if (id === 'close') return close();
-    close();
-    await runCapability(id, installer);
-  }));
-  document.body.appendChild(scrim);
-}
-
-let muted = false;
-async function runCapability(id, installer) {
-  try {
-    if (id === 'photo') {
-      const ok = await confirmSheet({ icon: '📷', title: 'Foto aufnehmen?', body: 'Die Kamera öffnet sich. Du bestätigst das Bild vor dem Senden.', confirmLabel: 'Kamera öffnen' });
-      if (!ok) return;
-      const photo = await capturePhoto();
-      if (photo) await offerAnalysis({ kind: 'image', dataUrl: photo.dataUrl, name: photo.name, mime: 'image/jpeg', size: photo.size });
-    } else if (id === 'video') {
-      const v = await captureVideo();
-      if (v) { toast(`Video bereit: ${v.name} (${humanSize(v.size)})`, { icon: '🎬' }); shareOrKeep(v.file); }
-    } else if (id === 'file') {
-      const docs = await pickDocuments({ multiple: true });
-      if (!docs.length) return;
-      const first = docs[0];
-      if ((first.type || '').includes('pdf') || /\.pdf$/i.test(first.name)) {
-        const b = await fileToDataUrl(first.file);
-        await offerAnalysis({ kind: 'pdf', dataUrl: b, name: first.name, mime: 'application/pdf', size: first.size });
-      } else if ((first.type || '').startsWith('image/')) {
-        const b = await fileToDataUrl(first.file);
-        await offerAnalysis({ kind: 'image', dataUrl: b, name: first.name, mime: first.type, size: first.size });
-      } else {
-        await infoSheet({ icon: '📄', title: 'Datei ausgewählt', body: `${first.name} · ${humanSize(first.size)}\nTyp: ${first.type}` });
-      }
-    } else if (id === 'paste') {
-      const ok = await confirmSheet({ icon: '📋', title: 'Kopierten Inhalt übernehmen?', body: 'Ich lese nur, was du jetzt freigibst.', confirmLabel: 'Einfügen' });
-      if (!ok) return;
-      const text = await readClipboard();
-      if (text) { sendContextToAgent('clipboard', text); await infoSheet({ icon: '📋', title: 'Übernommen', body: text.slice(0, 600) }); }
-    } else if (id === 'share') {
-      await shareContent({ title: 'Engelmann Voice Agent', text: 'Sprich mit dem Engelmann KI-Agenten:', url: location.origin });
-    } else if (id === 'mute') {
-      const app = window.LKApp;
-      if (!app || !app.isStarted || !app.isStarted()) { toast('Voice-Agent ist nicht aktiv', { icon: 'ℹ️' }); return; }
-      muted = !muted;
-      await app.setMuted(muted);
-      toast(muted ? 'Mikrofon stumm' : 'Mikrofon aktiv', { icon: muted ? '🔇' : '🎤' });
-    } else if (id === 'install') {
-      await installer.trigger();
-    }
-  } catch (e) {
-    toast(String(e && e.message || e), { icon: '⚠️' });
-  }
+// ---- Single-tap action popup (the tap is the gesture iOS needs) -------------
+// `run` is invoked synchronously inside the click handler, so it may open a
+// camera/file picker. It returns the payload sent back to the agent.
+function actionPopup({ icon, title, body, actionLabel, run }) {
+  return new Promise((resolve) => {
+    const scrim = document.createElement('div');
+    scrim.className = 'ek-scrim show';
+    scrim.style.zIndex = '1050';
+    scrim.setAttribute('role', 'dialog');
+    scrim.setAttribute('aria-modal', 'true');
+    scrim.innerHTML = `<div class="ek-sheet"><div class="ek-pad"><div class="ek-ic" aria-hidden="true">${icon}</div><h2 class="ek-title">${title}</h2>${body ? `<p class="ek-body">${body}</p>` : ''}</div><div class="ek-actions"><button class="ek-btn primary" data-go>${actionLabel}</button><button class="ek-btn ghost" data-cancel>Abbrechen</button></div></div>`;
+    let settled = false;
+    const close = () => { if (settled) return; settled = true; scrim.classList.remove('show'); setTimeout(() => scrim.remove(), 200); };
+    const go = scrim.querySelector('[data-go]');
+    go.addEventListener('click', async () => {
+      go.disabled = true; go.textContent = '…';
+      try { const r = await run(); close(); resolve(r); }
+      catch (e) { close(); resolve({ error: String(e && e.message || e) }); }
+    });
+    scrim.querySelector('[data-cancel]').addEventListener('click', () => { close(); resolve({ declined: true }); });
+    scrim.addEventListener('click', (e) => { if (e.target === scrim) { close(); resolve({ declined: true }); } });
+    document.body.appendChild(scrim);
+    requestAnimationFrame(() => go.focus());
+  });
 }
 
 function fileToDataUrl(file) {
@@ -202,58 +128,71 @@ function fileToDataUrl(file) {
   });
 }
 
-async function offerAnalysis(media) {
-  const ok = await confirmSheet({ icon: '✨', title: 'Soll ich das analysieren?', body: `${media.name} · ${humanSize(media.size)}`, confirmLabel: 'Analysieren' });
-  if (!ok) return;
-  const closing = toast('Analysiere…', { icon: '⏳', duration: 60000 });
-  try {
-    const text = await analyzeMedia({ kind: media.kind, dataUrl: media.dataUrl, name: media.name, mime: media.mime, prompt: 'Beschreibe knapp und hilfreich auf Deutsch, was hier zu sehen ist.' });
-    closing.remove();
-    if (text) {
-      sendContextToAgent(media.kind, text);
-      await infoSheet({ icon: '✨', title: 'Analyse', body: text.slice(0, 1200) });
-    }
-  } catch (e) {
-    closing.remove();
-    await infoSheet({ icon: '⚠️', title: 'Analyse nicht möglich', body: String(e && e.message || e) });
-  }
+async function capturePhotoQuick() {
+  const files = await pickFiles({ accept: 'image/*', capture: 'environment' }); // sync click = gesture
+  if (!files.length) return null;
+  return compressImage(files[0]);
 }
 
-async function shareOrKeep(file) {
-  const ok = await confirmSheet({ icon: '📤', title: 'Video teilen?', body: 'Du kannst das Video direkt teilen oder behalten.', confirmLabel: 'Teilen', cancelLabel: 'Behalten' });
-  if (ok) await shareContent({ title: 'Video', files: [file] });
-}
-
-// Hands context to the live agent (best-effort; surfaced to the user regardless).
-function sendContextToAgent(kind, text) {
-  try { window.LKApp && window.LKApp.publishData && window.LKApp.publishData({ type: 'user_context', kind, text: String(text).slice(0, 4000) }, 'app'); } catch {}
-}
-
-// ---- Agent-initiated capability requests (contextual popups) ----------------
-// Ready for when the agent publishes {type:'tool_request', id, tool, prompt}.
-function handleAgentData(msg) {
+// ---- Agent-initiated capability requests ------------------------------------
+async function handleAgentData(msg) {
   if (!msg || msg.type !== 'tool_request') return;
-  const labels = {
-    getLocation: 'deinen Standort verwenden',
-    takePhoto: 'ein Foto aufnehmen',
-    recordVideo: 'ein Video aufnehmen',
-    pickFile: 'eine Datei auswählen',
-    pasteFromClipboard: 'den kopierten Inhalt übernehmen',
-    shareContent: 'etwas teilen',
+  const reply = (payload) => {
+    try { window.LKApp.publishData(Object.assign({ type: 'tool_result', id: msg.id, tool: msg.tool }, payload), 'app'); } catch {}
   };
-  const what = labels[msg.tool] || 'eine Funktion nutzen';
-  confirmSheet({ icon: '🤝', title: 'Darf ich ' + what + '?', body: msg.prompt || '', confirmLabel: 'Ja' }).then(async (ok) => {
-    const reply = (payload) => { try { window.LKApp.publishData({ type: 'tool_result', id: msg.id, tool: msg.tool, ok: ok && !payload?.error, ...payload }, 'app'); } catch {} };
-    if (!ok) return reply({ declined: true });
-    try {
-      if (msg.tool === 'getLocation') { const c = await getLocationContext(); reply({ result: toAgentPayload(c) }); }
-      else if (msg.tool === 'takePhoto') { const p = await capturePhoto(); reply({ result: p ? { name: p.name, size: p.size } : null }); }
-      else if (msg.tool === 'pickFile') { const d = await pickDocuments({ multiple: false }); reply({ result: d[0] ? { name: d[0].name, size: d[0].size, type: d[0].type } : null }); }
-      else if (msg.tool === 'pasteFromClipboard') { const t = await readClipboard(); reply({ result: t || null }); }
-      else if (msg.tool === 'shareContent') { const done = await shareContent({ title: 'Engelmann', text: msg.text, url: msg.url }); reply({ result: { shared: done } }); }
-      else reply({ error: 'unknown tool' });
-    } catch (e) { reply({ error: String(e && e.message || e) }); }
-  });
+  try {
+    if (msg.tool === 'getLocation') {
+      toast('Standort wird geteilt…', { icon: '📍' });
+      const ctx = await getLocationContext();
+      reply({ result: toAgentPayload(ctx) });
+      return;
+    }
+    if (msg.tool === 'takePhoto') {
+      const r = await actionPopup({
+        icon: '📷', title: 'Foto aufnehmen', body: 'Tippe, dann öffnet sich die Kamera – ich schaue es mir an.', actionLabel: 'Kamera öffnen',
+        run: async () => {
+          const photo = await capturePhotoQuick();
+          if (!photo) return { declined: true };
+          const text = await analyzeMedia({ kind: 'image', dataUrl: photo.dataUrl, name: 'foto.jpg', mime: 'image/jpeg', prompt: 'Beschreibe knapp und hilfreich auf Deutsch, was auf dem Foto zu sehen ist.' });
+          return { result: text };
+        },
+      });
+      reply(r);
+      return;
+    }
+    if (msg.tool === 'pickFile') {
+      const r = await actionPopup({
+        icon: '📄', title: 'Datei auswählen', body: 'Wähle ein Bild oder PDF aus.', actionLabel: 'Auswählen',
+        run: async () => {
+          const docs = await pickDocuments({ multiple: false });
+          if (!docs.length) return { declined: true };
+          const d = docs[0];
+          if ((d.type || '').startsWith('image/')) {
+            const dataUrl = await fileToDataUrl(d.file);
+            const text = await analyzeMedia({ kind: 'image', dataUrl, name: d.name, mime: d.type, prompt: 'Beschreibe knapp auf Deutsch, was auf diesem Bild/Dokument zu sehen ist.' });
+            return { result: { text } };
+          }
+          if ((d.type || '').includes('pdf') || /\.pdf$/i.test(d.name)) {
+            return { result: { note: `Der Nutzer hat das PDF „${d.name}“ gewählt. Inhaltliche PDF-Analyse ist noch nicht verfügbar – bitte ihn, ein Foto der Seite zu machen oder den Text einzufügen.` } };
+          }
+          return { result: { note: `Datei ausgewählt: ${d.name} (${d.type || 'unbekannter Typ'}).` } };
+        },
+      });
+      reply(r);
+      return;
+    }
+    if (msg.tool === 'pasteFromClipboard') {
+      const r = await actionPopup({
+        icon: '📋', title: 'Inhalt einfügen', body: 'Übernimm den kopierten Text.', actionLabel: 'Einfügen',
+        run: async () => { const t = await readClipboard(); return t ? { result: t } : { declined: true }; },
+      });
+      reply(r);
+      return;
+    }
+    reply({ error: 'unknown tool' });
+  } catch (e) {
+    reply({ error: String(e && e.message || e) });
+  }
 }
 
 // ---- Bootstrap --------------------------------------------------------------
@@ -263,30 +202,18 @@ async function boot() {
   document.documentElement.dataset.standalone = String(env.standalone);
 
   registerServiceWorker();
-  const installer = initInstallPrompt();
+  initInstallPrompt(); // PWA install hint only (no capability buttons)
 
-  injectTrayCss();
-  const fab = document.createElement('button');
-  fab.className = 'ek-fab';
-  fab.type = 'button';
-  fab.setAttribute('aria-label', 'Funktionen öffnen');
-  fab.textContent = '＋';
-  fab.addEventListener('click', () => openTray(installer));
-  document.body.appendChild(fab);
-
-  // Wire agent->browser tool requests as soon as the LiveKit bridge exists.
+  // Agent -> browser tool requests, as soon as the LiveKit bridge exists.
   waitForLKApp().then((app) => { if (app && app.setDataHandler) app.setDataHandler(handleAgentData); });
 
-  // Location first (so the greeting can use it), but never block the voice start
-  // for more than ~4s (e.g. if the user ignores the location prompt).
+  // Location first (so the greeting + memory can use it), but never block the
+  // voice start for more than ~4s (e.g. if the user ignores the prompt).
   if (env.isMobile || caps.geolocation) {
     await Promise.race([primeLocation(), new Promise((r) => setTimeout(r, 4000))]);
   }
   await initVoice();
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
-} else {
-  boot();
-}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
