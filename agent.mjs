@@ -88,10 +88,13 @@ function hostOf(url) {
 }
 
 function resolveSttModel() {
-  const model = process.env.OPENAI_STT_MODEL || 'gpt-realtime-whisper';
-  if (model === 'gpt-4o-mini-transcribe') return 'gpt-realtime-whisper';
-  if (model === 'gpt-4o-transcribe') return 'gpt-realtime-whisper';
-  if (model === 'whisper-1') return 'gpt-realtime-whisper';
+  const model = process.env.OPENAI_STT_MODEL || 'gpt-4o-transcribe';
+  // 'gpt-realtime-whisper' is not a valid OpenAI transcription model and makes the
+  // realtime STT session reject the request ("You must not provide a model parameter
+  // for transcription sessions."), which tears down the whole AgentSession before the
+  // avatar can speak. Map any legacy/invalid value back to a supported model.
+  const valid = new Set(['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1']);
+  if (!valid.has(model)) return 'gpt-4o-transcribe';
   return model;
 }
 
