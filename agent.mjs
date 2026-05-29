@@ -155,6 +155,14 @@ export default defineAgent({
       llm: new openai.LLM({ model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini', temperature: 0.55 }),
       stt: new openai.STT({ model: resolveSttModel(), language: 'de', vad, useRealtime: false }),
       tts: new elevenlabs.TTS({ apiKey: process.env.ELEVEN_API_KEY, voiceId: VOICE_ID, model: MODEL_ID, language: 'de' }),
+      // Make the conversation feel human: don't let brief sounds/breaths cut the
+      // agent off (minDuration), give the user room to finish a thought before the
+      // agent answers (endpointing), and keep generating early for low latency.
+      turnHandling: {
+        endpointing: { minDelay: 480, maxDelay: 4500 },
+        interruption: { enabled: true, minDuration: 800, falseInterruptionTimeout: 2500 },
+        preemptiveGeneration: { enabled: true },
+      },
     });
 
     addSessionDiagnostics(session);
