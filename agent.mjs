@@ -5,7 +5,6 @@ import * as openai from '@livekit/agents-plugin-openai';
 import * as elevenlabs from '@livekit/agents-plugin-elevenlabs';
 import * as silero from '@livekit/agents-plugin-silero';
 import * as deepgram from '@livekit/agents-plugin-deepgram';
-import * as lkTurn from '@livekit/agents-plugin-livekit';
 import { AvatarSession } from '@livekit/agents-plugin-lemonslice';
 
 dotenv.config();
@@ -116,11 +115,19 @@ function createStt(vad) {
   return new openai.STT({ model: resolveSttModel(), language: 'de', vad, useRealtime: false });
 }
 
-// LiveKit's semantic end-of-utterance model (German-aware) decides when the
-// user is really done talking instead of reacting to mere silence. Best-effort:
-// if it can't load we return undefined and the session falls back to VAD.
-function createTurnDetector() {
+// LiveKit's semantic end-of-utterance model gives the most human turn-taking,
+// but its inference runner is registered on import and force-initialised at
+// worker startup — and in this deployment that init times out
+// ("runner initialization timed out"), which takes the whole worker down so no
+// avatar ever starts. It is therefore OPT-IN: only loaded (dynamic import, so
+// the runner isn't even registered otherwise) when ENABLE_TURN_DETECTOR=1.
+// Default off => proven VAD turn detection, working avatar.
+const ENABLE_TURN_DETECTOR = process.env.ENABLE_TURN_DETECTOR === '1' || process.env.ENABLE_TURN_DETECTOR === 'true';
+
+async function createTurnDetector() {
+  if (!ENABLE_TURN_DETECTOR) return undefined;
   try {
+    const lkTurn = await import('@livekit/agents-plugin-livekit');
     return new lkTurn.turnDetector.MultilingualModel();
   } catch (error) {
     console.error('[agent] turn detector init failed; falling back to VAD', JSON.stringify(safeError(error)));
@@ -206,7 +213,7 @@ export default defineAgent({
     console.log('[agent] room connected', JSON.stringify({ room: ctx.room?.name || null, local_identity: ctx.room?.localParticipant?.identity || null }));
 
     const vad = ctx.proc?.userData?.vad;
-    const turnDetection = createTurnDetector();
+    const turnDetection = await createTurnDetector();
     console.log('[agent] pipeline', JSON.stringify({ stt_provider: USE_DEEPGRAM ? 'deepgram' : 'openai-whisper', semantic_turn_detector: Boolean(turnDetection) }));
     const session = new voice.AgentSession({
       vad,
