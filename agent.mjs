@@ -163,6 +163,33 @@ function overrideConnectUrl(ctx, rtcUrl) {
 validateConfig();
 console.log('[agent] startup config ok', JSON.stringify({ agent_name: AGENT_NAME, livekit_region: LIVEKIT_REGION, livekit_api_host: hostOf(LIVEKIT_API_URL), livekit_rtc_host: hostOf(LIVEKIT_RTC_URL), stt_provider: USE_DEEPGRAM ? 'deepgram' : 'openai-whisper', has_deepgram_key: USE_DEEPGRAM, stt_model: USE_DEEPGRAM ? (process.env.DEEPGRAM_STT_MODEL || 'nova-2') : resolveSttModel(), has_livekit_url: Boolean(process.env.LIVEKIT_URL), has_livekit_key: Boolean(process.env.LIVEKIT_API_KEY), has_livekit_secret: Boolean(process.env.LIVEKIT_API_SECRET), has_openai_key: Boolean(process.env.OPENAI_API_KEY), has_eleven_api_key: Boolean(process.env.ELEVEN_API_KEY), has_elevenlabs_key: Boolean(process.env.ELEVENLABS_API_KEY), has_elevenlabs_voice: Boolean(VOICE_ID), has_lemonslice_key: Boolean(process.env.LEMONSLICE_API_KEY), has_lemonslice_agent_id: Boolean(AGENT_ID), has_lemonslice_image_url: Boolean(IMAGE_URL) }));
 
+// Reads the dispatch metadata the web server attached (contains the optional
+// user location for a context-aware greeting).
+function readJobMetadata(ctx) {
+  const raw = ctx?.job?.metadata || ctx?.job?.dispatch?.metadata || ctx?.room?.metadata || '';
+  if (!raw || typeof raw !== 'string') return {};
+  try { return JSON.parse(raw) || {}; } catch { return {}; }
+}
+
+// Varied, location-aware greeting instructions (the LLM phrases the actual line).
+function buildGreetingInstructions(location) {
+  const place = location && location.place && (location.place.label || location.place.city);
+  const pool = place
+    ? [
+        `Begrüße Simon herzlich in genau EINEM kurzen Satz und erwähne dabei natürlich, dass du erkennst, dass er gerade in der Nähe von ${place} ist.`,
+        `Sag Simon in einem lockeren Satz hallo und baue beiläufig ein, dass du seinen Standort (${place}) kennst und den Kontext übernommen hast.`,
+        `Begrüße Simon knapp und mit trockenem Humor in EINEM Satz und beziehe dich darauf, dass er sich gerade rund um ${place} befindet.`,
+        `Eröffne das Gespräch mit einem Satz, der erwähnt, dass du Simon in der Gegend von ${place} verortest, und frag, was du erledigen sollst.`,
+      ]
+    : [
+        'Begrüße Simon kurz, locker und mit einer kleinen Variation in genau EINEM Satz.',
+        'Sag Simon in einem knappen, freundlichen Satz hallo und frag, was du tun sollst.',
+        'Begrüße Simon mit trockenem Humor in EINEM kurzen Satz.',
+        'Eröffne das Gespräch mit einem lockeren Einzeiler und biete deine Hilfe an.',
+      ];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 const INSTRUCTIONS = 'Du bist Simons deutscher Voice-Agent und als sichtbarer LemonSlice-Avatar in der App zu sehen. Antworte immer Deutsch, kurz, klar, nuechtern und trocken-humorig. Maximal drei Saetze.';
 class Assistant extends voice.Agent { constructor() { super({ instructions: INSTRUCTIONS }); } }
 
@@ -223,7 +250,10 @@ export default defineAgent({
     // the avatar started; keep it on as a fallback when the avatar failed.
     await session.start({ agent: new Assistant(), room: ctx.room, outputOptions: { audioEnabled: !avatarStarted } });
     console.log('[agent] voice session started', JSON.stringify({ avatar_started: avatarStarted, room_audio_enabled: !avatarStarted }));
-    await session.generateReply({ instructions: 'Begruesse Simon kurz in einem Satz.' });
+    const jobMeta = readJobMetadata(ctx);
+    const greeting = buildGreetingInstructions(jobMeta.location);
+    console.log('[agent] greeting', JSON.stringify({ has_location: Boolean(jobMeta.location), place: jobMeta.location?.place?.label || null }));
+    await session.generateReply({ instructions: greeting });
     console.log('[agent] initial reply requested');
   },
 });
