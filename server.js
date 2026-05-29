@@ -160,7 +160,23 @@ console.error = (...args) => {
   rawConsole.error(...args);
 };
 
-app.use(express.json({ limit: '1mb' }));
+// 12mb so a compressed photo (base64 data URL) can be posted to /api/analyze.
+app.use(express.json({ limit: '12mb' }));
+
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+function sanitizeLocation(loc) {
+  if (!loc || typeof loc !== 'object') return null;
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const lat = num(loc.latitude);
+  const lon = num(loc.longitude);
+  if (lat === null || lon === null) return null;
+  const str = (v) => (typeof v === 'string' ? v.slice(0, 120) : null);
+  const place = loc.place && typeof loc.place === 'object'
+    ? { label: str(loc.place.label), city: str(loc.place.city), region: str(loc.place.region), country: str(loc.place.country) }
+    : null;
+  return { latitude: lat, longitude: lon, accuracy: num(loc.accuracy), timestamp: num(loc.timestamp), place };
+}
 
 function sendIndex(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -275,7 +291,7 @@ async function createJoinToken({ roomName, identity, name }) {
   return token.toJwt();
 }
 
-async function dispatchAgent({ roomName, identity }) {
+async function dispatchAgent({ roomName, identity, location }) {
   const client = new AgentDispatchClient(LK_API_URL, LK_KEY, LK_SECRET);
 
   const metadata = JSON.stringify({
@@ -285,6 +301,7 @@ async function dispatchAgent({ roomName, identity }) {
     created_at: new Date().toISOString(),
     livekit_api_host: getHost(LK_API_URL),
     livekit_rtc_host: getHost(LK_RTC_URL),
+    location: location || null,
   });
 
   console.log('[server] dispatch create', {
@@ -324,9 +341,11 @@ async function createLiveKitSession(req, res) {
   );
   const name = String(req.body?.name || req.query?.name || 'Simon').slice(0, 80);
 
+  const location = sanitizeLocation(req.body?.location);
+
   try {
     const token = await createJoinToken({ roomName, identity, name });
-    const dispatch = await dispatchAgent({ roomName, identity });
+    const dispatch = await dispatchAgent({ roomName, identity, location });
 
     return res.json({
       ok: true,
@@ -358,6 +377,99 @@ async function createLiveKitSession(req, res) {
 
 app.post('/livekit-token', createLiveKitSession);
 app.get('/livekit-token', createLiveKitSession);
+
+// --- Reverse geocoding proxy (OpenStreetMap Nominatim) -----------------------
+// Done server-side to satisfy Nominatim's User-Agent policy and avoid CORS.
+const GEO_CACHE = new Map();
+function geoKey(lat, lon) {
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`; // ~110m bucket, also a tiny cache
+}
+
+app.get('/api/reverse-geocode', async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lon = Number(req.query.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return res.status(400).json({ ok: false, error: 'lat/lon required' });
+  }
+  const key = geoKey(lat, lon);
+  if (GEO_CACHE.has(key)) return res.json({ ok: true, place: GEO_CACHE.get(key), cached: true });
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=12&accept-language=de`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const r = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'EngelmannVoiceAgent/1.0 (PWA reverse-geocode)', Accept: 'application/json' },
+    });
+    clearTimeout(timer);
+    if (!r.ok) return res.json({ ok: false, error: `geocoder ${r.status}` });
+    const data = await r.json();
+    const a = data.address || {};
+    const city = a.city || a.town || a.village || a.municipality || a.suburb || a.county || null;
+    const region = a.state || a.region || null;
+    const country = a.country || null;
+    const label = [city, region].filter(Boolean).join(', ') || data.display_name || null;
+    const place = { label, city, region, country };
+    if (GEO_CACHE.size > 200) GEO_CACHE.delete(GEO_CACHE.keys().next().value);
+    GEO_CACHE.set(key, place);
+    return res.json({ ok: true, place });
+  } catch (error) {
+    return res.json({ ok: false, error: 'geocoder unavailable' });
+  }
+});
+
+// --- AI media analysis (images via OpenAI vision) ----------------------------
+app.post('/api/analyze', async (req, res) => {
+  const { kind, dataUrl, prompt } = req.body || {};
+  if (kind === 'pdf') {
+    return res.json({
+      ok: false,
+      fallback: true,
+      error: 'PDF-Analyse ist in dieser Version noch nicht verfügbar. Mach am besten ein Foto der Seite oder füge den Text per „Einfügen“ ein.',
+    });
+  }
+  if (kind !== 'image' || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+    return res.status(400).json({ ok: false, error: 'image dataUrl required' });
+  }
+  if (!OPENAI_API_KEY) {
+    return res.json({ ok: false, error: 'Bildanalyse ist nicht konfiguriert (OPENAI_API_KEY fehlt).' });
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: process.env.OPENAI_VISION_MODEL || 'gpt-4o-mini',
+        max_tokens: 400,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: String(prompt || 'Beschreibe knapp und hilfreich auf Deutsch, was hier zu sehen ist.').slice(0, 500) },
+              { type: 'image_url', image_url: { url: dataUrl, detail: 'low' } },
+            ],
+          },
+        ],
+      }),
+    });
+    clearTimeout(timer);
+    if (!r.ok) {
+      const detail = await r.text().catch(() => '');
+      console.error('[server] analyze failed', { status: r.status, detail: detail.slice(0, 300) });
+      return res.json({ ok: false, error: `Analyse fehlgeschlagen (${r.status}).` });
+    }
+    const data = await r.json();
+    const text = data?.choices?.[0]?.message?.content || '';
+    return res.json({ ok: true, text });
+  } catch (error) {
+    console.error('[server] analyze error', { message: String(error?.message || error) });
+    return res.json({ ok: false, error: 'Analyse momentan nicht möglich.' });
+  }
+});
 
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
