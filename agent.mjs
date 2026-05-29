@@ -55,7 +55,8 @@ function toRtcUrl(url, region = 'eu') {
 }
 
 process.env.LEMONSLICE_API_KEY ||= process.env.LS_KEY || '';
-process.env.ELEVENLABS_API_KEY ||= process.env.EL_KEY || '';
+process.env.ELEVEN_API_KEY ||= process.env.ELEVENLABS_API_KEY || process.env.EL_KEY || '';
+process.env.ELEVENLABS_API_KEY ||= process.env.ELEVEN_API_KEY || process.env.EL_KEY || '';
 process.env.LIVEKIT_URL ||= process.env.LK_URL || '';
 process.env.LIVEKIT_API_KEY ||= process.env.LK_KEY || '';
 process.env.LIVEKIT_API_SECRET ||= process.env.LK_SECRET || '';
@@ -96,7 +97,7 @@ function validateConfig() {
   requireEnv('LIVEKIT_API_KEY', 'LK_KEY');
   requireEnv('LIVEKIT_API_SECRET', 'LK_SECRET');
   requireEnv('OPENAI_API_KEY');
-  requireEnv('ELEVENLABS_API_KEY', 'EL_KEY');
+  requireEnv('ELEVEN_API_KEY', 'ELEVENLABS_API_KEY', 'EL_KEY');
   requireEnv('ELEVENLABS_VOICE_ID', 'EL_VOICE_ID');
   requireEnv('LEMONSLICE_API_KEY', 'LS_KEY');
 
@@ -119,6 +120,15 @@ function hostOf(url) {
   } catch {
     return null;
   }
+}
+
+function resolveSttModel() {
+  const model = process.env.OPENAI_STT_MODEL || 'whisper-1';
+
+  if (model === 'gpt-4o-mini-transcribe') return 'whisper-1';
+  if (model === 'gpt-4o-transcribe') return 'whisper-1';
+
+  return model;
 }
 
 function addSessionDiagnostics(session) {
@@ -193,10 +203,12 @@ console.log('[agent] startup config ok', JSON.stringify({
   livekit_region: LIVEKIT_REGION,
   livekit_api_host: hostOf(LIVEKIT_API_URL),
   livekit_rtc_host: hostOf(LIVEKIT_RTC_URL),
+  stt_model: resolveSttModel(),
   has_livekit_url: Boolean(process.env.LIVEKIT_URL),
   has_livekit_key: Boolean(process.env.LIVEKIT_API_KEY),
   has_livekit_secret: Boolean(process.env.LIVEKIT_API_SECRET),
   has_openai_key: Boolean(process.env.OPENAI_API_KEY),
+  has_eleven_api_key: Boolean(process.env.ELEVEN_API_KEY),
   has_elevenlabs_key: Boolean(process.env.ELEVENLABS_API_KEY),
   has_elevenlabs_voice: Boolean(VOICE_ID),
   has_lemonslice_key: Boolean(process.env.LEMONSLICE_API_KEY),
@@ -241,10 +253,11 @@ export default defineAgent({
         temperature: 0.55,
       }),
       stt: new openai.STT({
-        model: process.env.OPENAI_STT_MODEL || 'gpt-4o-mini-transcribe',
+        model: resolveSttModel(),
         language: 'de',
       }),
       tts: new elevenlabs.TTS({
+        apiKey: process.env.ELEVEN_API_KEY,
         voiceId: VOICE_ID,
         model: MODEL_ID,
         language: 'de',
@@ -260,7 +273,7 @@ export default defineAgent({
       agentPrompt: 'Calm German assistant with natural eye contact, subtle head movement, and neutral professional expression.',
       idleTimeout: -1,
       extraPayload: {
-        aspect_ratio: '9x16',
+        aspect_ratio: '1x1',
       },
     };
 
