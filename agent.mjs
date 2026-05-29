@@ -88,14 +88,15 @@ function hostOf(url) {
 }
 
 function resolveSttModel() {
-  const model = process.env.OPENAI_STT_MODEL || 'gpt-4o-transcribe';
-  // 'gpt-realtime-whisper' is not a valid OpenAI transcription model and makes the
-  // realtime STT session reject the request ("You must not provide a model parameter
-  // for transcription sessions."), which tears down the whole AgentSession before the
-  // avatar can speak. Map any legacy/invalid value back to a supported model.
-  const valid = new Set(['gpt-4o-transcribe', 'gpt-4o-mini-transcribe', 'whisper-1']);
-  if (!valid.has(model)) return 'gpt-4o-transcribe';
-  return model;
+  // The OpenAI plugin defaults to its *realtime* transcription socket
+  // (/realtime?intent=transcription), whose model whitelist rejects both
+  // 'gpt-realtime-whisper' ("You must not provide a model parameter for
+  // transcription sessions.") and 'gpt-4o-transcribe' ("not supported in
+  // transcription mode."). Both errors are unrecoverable and tear down the
+  // whole AgentSession before the avatar can speak. We therefore use the
+  // classic (non-realtime) transcription path with 'whisper-1', which is
+  // universally supported; Silero VAD segments the audio for it.
+  return process.env.OPENAI_STT_MODEL || 'whisper-1';
 }
 
 function addSessionDiagnostics(session) {
@@ -152,7 +153,7 @@ export default defineAgent({
     const session = new voice.AgentSession({
       vad,
       llm: new openai.LLM({ model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini', temperature: 0.55 }),
-      stt: new openai.STT({ model: resolveSttModel(), language: 'de', vad }),
+      stt: new openai.STT({ model: resolveSttModel(), language: 'de', vad, useRealtime: false }),
       tts: new elevenlabs.TTS({ apiKey: process.env.ELEVEN_API_KEY, voiceId: VOICE_ID, model: MODEL_ID, language: 'de' }),
     });
 
