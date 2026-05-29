@@ -10,6 +10,10 @@ RUN apt-get update \
 COPY package*.json ./
 RUN npm install --omit=dev
 
+# Pre-download plugin model files (e.g. the semantic turn-detector ONNX model)
+# into the image so there is no cold-start download on the first conversation.
+RUN ./node_modules/.bin/livekit-agents download-files || true
+
 COPY . .
 
 ENV NODE_ENV=production

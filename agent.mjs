@@ -4,6 +4,8 @@ import { cli, defineAgent, ServerOptions, voice } from '@livekit/agents';
 import * as openai from '@livekit/agents-plugin-openai';
 import * as elevenlabs from '@livekit/agents-plugin-elevenlabs';
 import * as silero from '@livekit/agents-plugin-silero';
+import * as deepgram from '@livekit/agents-plugin-deepgram';
+import * as lkTurn from '@livekit/agents-plugin-livekit';
 import { AvatarSession } from '@livekit/agents-plugin-lemonslice';
 
 dotenv.config();
@@ -99,6 +101,33 @@ function resolveSttModel() {
   return process.env.OPENAI_STT_MODEL || 'whisper-1';
 }
 
+const USE_DEEPGRAM = Boolean(process.env.DEEPGRAM_API_KEY);
+
+// Streaming STT (Deepgram) is far lower latency than whisper-1 batch and makes
+// the conversation feel instant. We only use it when a key is configured, and
+// fall back to the proven OpenAI whisper-1 path otherwise so nothing breaks.
+function createStt(vad) {
+  if (USE_DEEPGRAM) {
+    return new deepgram.STT({
+      model: process.env.DEEPGRAM_STT_MODEL || 'nova-2',
+      language: process.env.DEEPGRAM_STT_LANGUAGE || 'de',
+    });
+  }
+  return new openai.STT({ model: resolveSttModel(), language: 'de', vad, useRealtime: false });
+}
+
+// LiveKit's semantic end-of-utterance model (German-aware) decides when the
+// user is really done talking instead of reacting to mere silence. Best-effort:
+// if it can't load we return undefined and the session falls back to VAD.
+function createTurnDetector() {
+  try {
+    return new lkTurn.turnDetector.MultilingualModel();
+  } catch (error) {
+    console.error('[agent] turn detector init failed; falling back to VAD', JSON.stringify(safeError(error)));
+    return undefined;
+  }
+}
+
 function addSessionDiagnostics(session) {
   const events = voice.AgentSessionEventTypes || {};
   const names = [events.AgentStateChanged, events.UserStateChanged, events.UserInputTranscribed, events.ConversationItemAdded, events.SpeechCreated, events.Error, events.Close].filter(Boolean);
@@ -132,7 +161,7 @@ function overrideConnectUrl(ctx, rtcUrl) {
 }
 
 validateConfig();
-console.log('[agent] startup config ok', JSON.stringify({ agent_name: AGENT_NAME, livekit_region: LIVEKIT_REGION, livekit_api_host: hostOf(LIVEKIT_API_URL), livekit_rtc_host: hostOf(LIVEKIT_RTC_URL), stt_model: resolveSttModel(), has_livekit_url: Boolean(process.env.LIVEKIT_URL), has_livekit_key: Boolean(process.env.LIVEKIT_API_KEY), has_livekit_secret: Boolean(process.env.LIVEKIT_API_SECRET), has_openai_key: Boolean(process.env.OPENAI_API_KEY), has_eleven_api_key: Boolean(process.env.ELEVEN_API_KEY), has_elevenlabs_key: Boolean(process.env.ELEVENLABS_API_KEY), has_elevenlabs_voice: Boolean(VOICE_ID), has_lemonslice_key: Boolean(process.env.LEMONSLICE_API_KEY), has_lemonslice_agent_id: Boolean(AGENT_ID), has_lemonslice_image_url: Boolean(IMAGE_URL) }));
+console.log('[agent] startup config ok', JSON.stringify({ agent_name: AGENT_NAME, livekit_region: LIVEKIT_REGION, livekit_api_host: hostOf(LIVEKIT_API_URL), livekit_rtc_host: hostOf(LIVEKIT_RTC_URL), stt_provider: USE_DEEPGRAM ? 'deepgram' : 'openai-whisper', has_deepgram_key: USE_DEEPGRAM, stt_model: USE_DEEPGRAM ? (process.env.DEEPGRAM_STT_MODEL || 'nova-2') : resolveSttModel(), has_livekit_url: Boolean(process.env.LIVEKIT_URL), has_livekit_key: Boolean(process.env.LIVEKIT_API_KEY), has_livekit_secret: Boolean(process.env.LIVEKIT_API_SECRET), has_openai_key: Boolean(process.env.OPENAI_API_KEY), has_eleven_api_key: Boolean(process.env.ELEVEN_API_KEY), has_elevenlabs_key: Boolean(process.env.ELEVENLABS_API_KEY), has_elevenlabs_voice: Boolean(VOICE_ID), has_lemonslice_key: Boolean(process.env.LEMONSLICE_API_KEY), has_lemonslice_agent_id: Boolean(AGENT_ID), has_lemonslice_image_url: Boolean(IMAGE_URL) }));
 
 const INSTRUCTIONS = 'Du bist Simons deutscher Voice-Agent und als sichtbarer LemonSlice-Avatar in der App zu sehen. Antworte immer Deutsch, kurz, klar, nuechtern und trocken-humorig. Maximal drei Saetze.';
 class Assistant extends voice.Agent { constructor() { super({ instructions: INSTRUCTIONS }); } }
@@ -150,11 +179,23 @@ export default defineAgent({
     console.log('[agent] room connected', JSON.stringify({ room: ctx.room?.name || null, local_identity: ctx.room?.localParticipant?.identity || null }));
 
     const vad = ctx.proc?.userData?.vad;
+    const turnDetection = createTurnDetector();
+    console.log('[agent] pipeline', JSON.stringify({ stt_provider: USE_DEEPGRAM ? 'deepgram' : 'openai-whisper', semantic_turn_detector: Boolean(turnDetection) }));
     const session = new voice.AgentSession({
       vad,
       llm: new openai.LLM({ model: process.env.OPENAI_AGENT_MODEL || 'gpt-4o-mini', temperature: 0.55 }),
-      stt: new openai.STT({ model: resolveSttModel(), language: 'de', vad, useRealtime: false }),
+      stt: createStt(vad),
       tts: new elevenlabs.TTS({ apiKey: process.env.ELEVEN_API_KEY, voiceId: VOICE_ID, model: MODEL_ID, language: 'de' }),
+      // Make the conversation feel human: a semantic model decides when the user
+      // is really done (turnDetection), brief sounds/breaths don't cut the agent
+      // off (minDuration), the user gets room to finish a thought (endpointing),
+      // and we generate early for low latency.
+      turnHandling: {
+        turnDetection,
+        endpointing: { minDelay: 480, maxDelay: 4500 },
+        interruption: { enabled: true, minDuration: 800, falseInterruptionTimeout: 2500 },
+        preemptiveGeneration: { enabled: true },
+      },
     });
 
     addSessionDiagnostics(session);
